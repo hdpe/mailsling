@@ -3,7 +3,8 @@ package main
 import (
 	"log"
 	"os"
-	"hdpe.me/remission/mailer/internal/mailer"
+
+	"hdpe.me/remission-mailer/internal/mailer"
 )
 
 func main() {
