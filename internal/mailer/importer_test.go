@@ -1,6 +1,9 @@
 package mailer
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestParseSignUp(t *testing.T) {
 	str := `{"type":"sign_up","email":"x@y.com"}`
@@ -25,21 +28,21 @@ func TestDoProcess(t *testing.T) {
 	message1 := &testMessage{Text: `{"type":"sign_up","email":"y"}`}
 
 	ms := &testMessageSource{messages: []Message{message0, message1}}
-	persister := &testPersister{}
-	importer := &Importer{ms: ms, persister: persister}
+	repo := &testRepository{}
+	importer := &Importer{ms: ms, repo: repo}
 
 	importer.DoProcess()
 
-	if expected, actual := 2, len(persister.signUps); expected != actual {
+	if expected, actual := 2, len(repo.users); expected != actual {
 		t.Fatalf("Expected %d sign ups, was %d", expected, actual)
 	}
-	if expected, actual := "x", persister.signUps[0].Email; expected != actual {
+	if expected, actual := "x", repo.users[0].Email; expected != actual {
 		t.Errorf("Expected first persisted sign up email %s, was %s", expected, actual)
 	}
 	if processed := ms.processedMessages[message0]; !processed {
 		t.Errorf("Expected first Message to be processed")
 	}
-	if expected, actual := "y", persister.signUps[1].Email; expected != actual {
+	if expected, actual := "y", repo.users[1].Email; expected != actual {
 		t.Errorf("Expected second persisted sign up email %s, was %s", expected, actual)
 	}
 	if processed := ms.processedMessages[message1]; !processed {
@@ -80,11 +83,31 @@ func (msg *testMessage) GetText() string {
 	return msg.Text
 }
 
-type testPersister struct {
-	signUps []SignUp
+type testRepository struct {
+	users []*User
 }
 
-func (persister *testPersister) InsertSignUp(signUp SignUp) error {
-	persister.signUps = append(persister.signUps, signUp)
+func (r *testRepository) GetUsersNotWelcomed() ([]User, error) {
+	var result []User
+	for _, u := range r.users {
+		if u.Status == UserStatuses.Get("new") {
+			result = append(result, *u)
+		}
+	}
+	return result, nil
+}
+
+func (r *testRepository) InsertUser(user User) error {
+	r.users = append(r.users, &user)
 	return nil
+}
+
+func (r *testRepository) UpdateUser(user User) error {
+	for i, u := range r.users {
+		if u.ID == user.ID {
+			r.users[i] = &user
+			return nil
+		}
+	}
+	panic(fmt.Sprintf("no such user %d", user.ID))
 }

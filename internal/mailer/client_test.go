@@ -16,7 +16,7 @@ func TestMailChimpClient_SubscribeUser(t *testing.T) {
 
 	client := &mailChimpClient{ops: ops, config: config}
 
-	client.SubscribeUser(SignUpMessage{Email: "a@b.com"})
+	client.SubscribeUser(User{Email: "a@b.com"})
 
 	if num := len(ops.received); num != 1 {
 		t.Fatalf("Expected to receive 1 request, actually %d", num)
@@ -87,7 +87,7 @@ func TestMailChimpClient_SubscribeUserErrors(t *testing.T) {
 
 		client := &mailChimpClient{ops: ops, config: config}
 
-		err := client.SubscribeUser(SignUpMessage{Email: "a@b.com"})
+		err := client.SubscribeUser(User{Email: "a@b.com"})
 
 		if err == nil || strings.Index(fmt.Sprintf("%s", err), tc.expected) != 0 {
 			t.Errorf("Expected error %s %q, actually %q", tc.d, tc.expected, err)

@@ -13,8 +13,8 @@ type SignUpMessage struct {
 }
 
 type Importer struct {
-	ms        MessageSource
-	persister Persister
+	ms   MessageSource
+	repo Repository
 }
 
 func (r *Importer) DoProcess() error {
@@ -31,7 +31,7 @@ func (r *Importer) DoProcess() error {
 			return fmt.Errorf("couldn't parse sign up from message %q: %v", msg.GetText(), err)
 		}
 
-		err = r.persister.InsertSignUp(SignUp{Email: signUp.Email})
+		err = r.repo.InsertUser(User{Email: signUp.Email})
 		if err != nil {
 			return fmt.Errorf("couldn't insert sign up to DB: %v", err)
 		}
@@ -43,6 +43,10 @@ func (r *Importer) DoProcess() error {
 	}
 
 	return nil
+}
+
+func NewImporter(ms MessageSource, repo Repository) *Importer {
+	return &Importer{ms, repo}
 }
 
 func parseSignUp(str string) (SignUpMessage, error) {

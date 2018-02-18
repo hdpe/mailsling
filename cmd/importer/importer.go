@@ -9,7 +9,7 @@ import (
 
 func main() {
 
-	persister, err := mailer.NewPersister(os.Getenv("MAILER_DB_DSN"))
+	repo, err := mailer.NewRepository(os.Getenv("MAILER_DB_DSN"))
 
 	if err != nil {
 		log.Fatal("Error! ", err)
@@ -21,7 +21,7 @@ func main() {
 		log.Fatal("Error! ", err)
 	}
 
-	err = (&mailer.Importer{ms, persister}).DoProcess()
+	err = mailer.NewImporter(ms, repo).DoProcess()
 
 	if err != nil {
 		log.Fatal("Error! ", err)

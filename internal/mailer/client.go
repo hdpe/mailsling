@@ -8,7 +8,7 @@ import (
 )
 
 type Client interface {
-	SubscribeUser(signUp SignUpMessage) error
+	SubscribeUser(user User) error
 }
 
 type postListMembersRequest struct {
@@ -16,8 +16,8 @@ type postListMembersRequest struct {
 	Status string `json:"status"`
 }
 
-func NewClient(config MailChimpConfig) Client {
-	return &mailChimpClient{ops: &http.Client{}, config: config}
+func NewClientConfig(dc string, apiKey string, listID string) *MailChimpConfig {
+	return &MailChimpConfig{dc: dc, apiKey: apiKey, listID: listID}
 }
 
 type clientOperations interface {
@@ -35,11 +35,15 @@ type MailChimpConfig struct {
 	listID string
 }
 
-func (r *mailChimpClient) SubscribeUser(signUp SignUpMessage) error {
+func (r MailChimpConfig) NewClient() Client {
+	return &mailChimpClient{ops: &http.Client{}, config: r}
+}
+
+func (r *mailChimpClient) SubscribeUser(user User) error {
 	// https://developer.mailchimp.com/documentation/mailchimp/guides/manage-subscribers-with-the-mailchimp-api/
 	url := fmt.Sprintf("https://%s.api.mailchimp.com/3.0/lists/%s/members", r.config.dc, r.config.listID)
 
-	payload := postListMembersRequest{Email: signUp.Email, Status: "subscribed"}
+	payload := postListMembersRequest{Email: user.Email, Status: "subscribed"}
 	b, err := json.Marshal(payload)
 	if err != nil {
 		panic(err)
