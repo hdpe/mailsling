@@ -1,24 +1,21 @@
 package mailer
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestParseSignUp(t *testing.T) {
 	str := `{"type":"sign_up","email":"x@y.com"}`
 
-	signUp, err := ParseSignUp(str)
+	signUp, err := parseSignUp(str)
 
 	if err != nil {
 		t.Fatalf("error parsing json: %s", err)
 	}
 
-	expectedType, expectedEmail := "sign_up", "x@y.com"
-	if signUp.Type != expectedType {
-		t.Errorf("Expected %s, was %s", expectedType, signUp.Type)
+	if expected, actual := "sign_up", signUp.Type; expected != actual {
+		t.Errorf("Expected %s, was %s", expected, actual)
 	}
-	if signUp.Email != expectedEmail {
-		t.Errorf("Expected %s, was %s", expectedEmail, signUp.Email)
+	if expected, actual := "x@y.com", signUp.Email; expected != actual {
+		t.Errorf("Expected %s, was %s", expected, actual)
 	}
 }
 
@@ -29,25 +26,23 @@ func TestDoProcess(t *testing.T) {
 
 	ms := &testMessageSource{messages: []Message{message0, message1}}
 	persister := &testPersister{}
+	importer := &Importer{ms: ms, persister: persister}
 
-	DoProcess(ms, persister)
+	importer.DoProcess()
 
-	expectedSignUpsCount := 2
-	expectedSignUp0Email, expectedSignUp1Email := "x", "y"
-
-	if len(persister.signUps) != expectedSignUpsCount {
-		t.Fatalf("Expected %d sign ups, was %d", expectedSignUpsCount, persister.signUps)
+	if expected, actual := 2, len(persister.signUps); expected != actual {
+		t.Fatalf("Expected %d sign ups, was %d", expected, actual)
 	}
-	if email := persister.signUps[0].Email; email != expectedSignUp0Email {
-		t.Errorf("Expected first persisted sign up email %s, was %s", expectedSignUp0Email, email)
+	if expected, actual := "x", persister.signUps[0].Email; expected != actual {
+		t.Errorf("Expected first persisted sign up email %s, was %s", expected, actual)
 	}
-	if message0Processed := ms.processedMessages[message0]; !message0Processed {
+	if processed := ms.processedMessages[message0]; !processed {
 		t.Errorf("Expected first Message to be processed")
 	}
-	if email := persister.signUps[1].Email; email != expectedSignUp1Email {
-		t.Errorf("Expected second persisted sign up email %s, was %s", expectedSignUp1Email, email)
+	if expected, actual := "y", persister.signUps[1].Email; expected != actual {
+		t.Errorf("Expected second persisted sign up email %s, was %s", expected, actual)
 	}
-	if message1Processed := ms.processedMessages[message1]; !message1Processed {
+	if processed := ms.processedMessages[message1]; !processed {
 		t.Errorf("Expected second Message to be processed")
 	}
 }

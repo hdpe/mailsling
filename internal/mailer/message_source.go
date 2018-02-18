@@ -1,6 +1,7 @@
 package mailer
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -26,7 +27,7 @@ type SQSMessageSource struct {
 func NewSQSMessageSource(queueUrl string) (*SQSMessageSource, error) {
 	sess, err := session.NewSession()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("couldn't configure AWS client: %v", err)
 	}
 	ms := &SQSMessageSource{sqsClient: sqs.New(sess), url: queueUrl}
 	return ms, nil
@@ -37,8 +38,8 @@ func (ms *SQSMessageSource) GetNextMessage() (Message, error) {
 		return next, nil
 	}
 	out, err := ms.sqsClient.ReceiveMessage(&sqs.ReceiveMessageInput{QueueUrl: &ms.url})
-	if out == nil || err != nil {
-		return nil, err
+	if err != nil {
+		return nil, fmt.Errorf("error receiving SQS message: %v", err)
 	}
 	log.Printf("Got %d messages", len(out.Messages))
 	for _, msg := range out.Messages {
@@ -50,7 +51,7 @@ func (ms *SQSMessageSource) GetNextMessage() (Message, error) {
 func (ms *SQSMessageSource) MessageProcessed(message Message) error {
 	handle := message.(*sqsMessage).delegate.ReceiptHandle
 	_, err := ms.sqsClient.DeleteMessage(&sqs.DeleteMessageInput{QueueUrl: &ms.url, ReceiptHandle: handle})
-	return err
+	return fmt.Errorf("error deleting SQS message", err)
 }
 
 func (ms *SQSMessageSource) dequeue() Message {

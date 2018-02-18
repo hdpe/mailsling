@@ -22,7 +22,6 @@ func TestSqsMessageSource_GetNextMessageInvokesAWSApi(t *testing.T) {
 }
 
 func TestSqsMessageSource_GetNextMessageReturnsMessages(t *testing.T) {
-	msgBody0 := "x"
 	client := &testSqsClient{messagesPerRequest: [][]sqs.Message{
 		{{Body: strptr("x")}},
 	}}
@@ -36,8 +35,8 @@ func TestSqsMessageSource_GetNextMessageReturnsMessages(t *testing.T) {
 	if next == nil {
 		t.Fatalf("Message was nil")
 	}
-	if txt := next.GetText(); txt != msgBody0 {
-		t.Errorf("Expected Message body %s, was %s", msgBody0, txt)
+	if expected, txt := "x", next.GetText(); txt != expected {
+		t.Errorf("Expected Message body %s, was %s", expected, txt)
 	}
 
 	next, err = ms.GetNextMessage()
@@ -76,7 +75,7 @@ type testSqsClient struct {
 func (c *testSqsClient) ReceiveMessage(input *sqs.ReceiveMessageInput) (*sqs.ReceiveMessageOutput, error) {
 	c.receivedReceiveMessageInput = input
 	if c.requestIndex >= len(c.messagesPerRequest) {
-		return nil, nil
+		return &sqs.ReceiveMessageOutput{}, nil
 	}
 	var result []*sqs.Message
 	for i := 0; i < len(c.messagesPerRequest[c.requestIndex]); i++ {

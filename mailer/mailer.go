@@ -21,7 +21,7 @@ func main() {
 		log.Fatal("Error! ", err)
 	}
 
-	err = mailer.DoProcess(ms, persister)
+	err = (&mailer.Importer{ms, persister}).DoProcess()
 
 	if err != nil {
 		log.Fatal("Error! ", err)

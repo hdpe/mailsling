@@ -7,19 +7,8 @@ import (
 	"net/http"
 )
 
-type clientOperations interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
-type client struct {
-	ops    clientOperations
-	config mailChimpConfig
-}
-
-type mailChimpConfig struct {
-	dc     string
-	apiKey string
-	listID string
+type Client interface {
+	SubscribeUser(signUp SignUpMessage) error
 }
 
 type postListMembersRequest struct {
@@ -27,24 +16,50 @@ type postListMembersRequest struct {
 	Status string `json:"status"`
 }
 
-func newClient(config mailChimpConfig) *client {
-	return &client{ops: &http.Client{}, config: config}
+func NewClient(config MailChimpConfig) Client {
+	return &mailChimpClient{ops: &http.Client{}, config: config}
 }
 
-func (r *client) SubscribeUser(email string) error {
+type clientOperations interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+type mailChimpClient struct {
+	ops    clientOperations
+	config MailChimpConfig
+}
+
+type MailChimpConfig struct {
+	dc     string
+	apiKey string
+	listID string
+}
+
+func (r *mailChimpClient) SubscribeUser(signUp SignUpMessage) error {
 	// https://developer.mailchimp.com/documentation/mailchimp/guides/manage-subscribers-with-the-mailchimp-api/
-	req := postListMembersRequest{Email: email, Status: "subscribed"}
-	url := fmt.Sprintf("https://%s.api.maidlchimp.com/3.0/lists/%s/members", r.config.dc, r.config.listID)
-	b, err := json.Marshal(req)
+	url := fmt.Sprintf("https://%s.api.mailchimp.com/3.0/lists/%s/members", r.config.dc, r.config.listID)
+
+	payload := postListMembersRequest{Email: signUp.Email, Status: "subscribed"}
+	b, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		panic(err)
 	}
-	req2, err := http.NewRequest("POST", url, bytes.NewReader(b))
-	req2.Header["Content-Type"] = []string{"application/json"}
-	req2.SetBasicAuth("IGNORED", r.config.apiKey)
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(b))
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating request: %v", err)
 	}
-	_, err = r.ops.Do(req2)
+	req.Header["Content-Type"] = []string{"application/json"}
+	req.SetBasicAuth("IGNORED", r.config.apiKey)
+
+	resp, err := r.ops.Do(req)
+	if err != nil {
+		return fmt.Errorf("error sending request: %v", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("error received from server: HTTP status %d", resp.StatusCode)
+	}
+
 	return err
 }
