@@ -51,7 +51,7 @@ func (ms *SQSMessageSource) GetNextMessage() (Message, error) {
 func (ms *SQSMessageSource) MessageProcessed(message Message) error {
 	handle := message.(*sqsMessage).delegate.ReceiptHandle
 	_, err := ms.sqsClient.DeleteMessage(&sqs.DeleteMessageInput{QueueUrl: &ms.url, ReceiptHandle: handle})
-	return fmt.Errorf("error deleting SQS message", err)
+	return fmt.Errorf("error deleting SQS message: %v", err)
 }
 
 func (ms *SQSMessageSource) dequeue() Message {

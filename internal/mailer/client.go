@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"strings"
 )
 
 type Client interface {
@@ -12,12 +14,12 @@ type Client interface {
 }
 
 type postListMembersRequest struct {
-	Email  string `json:"email address"`
+	Email  string `json:"email_address"`
 	Status string `json:"status"`
 }
 
-func NewClientConfig(dc string, apiKey string, listID string) *MailChimpConfig {
-	return &MailChimpConfig{dc: dc, apiKey: apiKey, listID: listID}
+func NewClientConfig(apiKey string, listID string) *MailChimpConfig {
+	return &MailChimpConfig{apiKey: apiKey, listID: listID}
 }
 
 type clientOperations interface {
@@ -30,7 +32,6 @@ type mailChimpClient struct {
 }
 
 type MailChimpConfig struct {
-	dc     string
 	apiKey string
 	listID string
 }
@@ -41,7 +42,13 @@ func (r MailChimpConfig) NewClient() Client {
 
 func (r *mailChimpClient) SubscribeUser(user User) error {
 	// https://developer.mailchimp.com/documentation/mailchimp/guides/manage-subscribers-with-the-mailchimp-api/
-	url := fmt.Sprintf("https://%s.api.mailchimp.com/3.0/lists/%s/members", r.config.dc, r.config.listID)
+	keyParts := strings.Split(r.config.apiKey, "-")
+	if len(keyParts) < 2 {
+		return fmt.Errorf("API key has no DC suffix")
+	}
+	dc := keyParts[1]
+
+	url := fmt.Sprintf("https://%s.api.mailchimp.com/3.0/lists/%s/members", dc, r.config.listID)
 
 	payload := postListMembersRequest{Email: user.Email, Status: "subscribed"}
 	b, err := json.Marshal(payload)
@@ -62,6 +69,10 @@ func (r *mailChimpClient) SubscribeUser(user User) error {
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		b := &bytes.Buffer{}
+		b.ReadFrom(resp.Body)
+		log.Println(string(b.Bytes()))
+
 		return fmt.Errorf("error received from server: HTTP status %d", resp.StatusCode)
 	}
 

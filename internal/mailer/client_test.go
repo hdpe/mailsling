@@ -12,7 +12,7 @@ import (
 
 func TestMailChimpClient_SubscribeUser(t *testing.T) {
 	ops := &testClientOperations{}
-	config := MailChimpConfig{dc: "x", listID: "y", apiKey: "APIKEY"}
+	config := MailChimpConfig{listID: "y", apiKey: "APIKEY-dc"}
 
 	client := &mailChimpClient{ops: ops, config: config}
 
@@ -27,14 +27,14 @@ func TestMailChimpClient_SubscribeUser(t *testing.T) {
 	if expected, actual := "POST", req.Method; expected != actual {
 		t.Errorf("Expected method %v, actually %v", expected, actual)
 	}
-	if expected, actual := "https://x.api.mailchimp.com/3.0/lists/y/members", req.URL.String(); expected != actual {
+	if expected, actual := "https://dc.api.mailchimp.com/3.0/lists/y/members", req.URL.String(); expected != actual {
 		t.Errorf("Expected URL %v, actually %v", expected, actual)
 	}
 	body, err := read(req.Body)
 	if err != nil {
 		t.Errorf("Did not expect error %v", err)
 	}
-	if expected := `{"email address":"a@b.com","status":"subscribed"}`; expected != body {
+	if expected := `{"email_address":"a@b.com","status":"subscribed"}`; expected != body {
 		t.Errorf("Expected request body %v, actually %v", expected, body)
 	}
 	if expected, actual := []string{"application/json"}, req.Header["Content-Type"]; !reflect.DeepEqual(expected, actual) {
@@ -43,7 +43,7 @@ func TestMailChimpClient_SubscribeUser(t *testing.T) {
 	_, password, ok := req.BasicAuth()
 	if !ok {
 		t.Errorf("Basic auth not ok")
-	} else if expected := "APIKEY"; expected != password {
+	} else if expected := "APIKEY-dc"; expected != password {
 		t.Errorf("Expected basic auth password %v, was %v", expected, password)
 	}
 }
@@ -51,31 +51,39 @@ func TestMailChimpClient_SubscribeUser(t *testing.T) {
 func TestMailChimpClient_SubscribeUserErrors(t *testing.T) {
 	testCases := []struct {
 		d        string
-		dc       string
+		apiKey   string
 		onDo     func() (*http.Response, error)
 		expected string
 	}{
 		{
-			d:  "on http.NewRequest",
-			dc: "%z",
+			d:      "on API key has no dc suffix",
+			apiKey: "x",
+			onDo: func() (*http.Response, error) {
+				return newClientTestResponse(200), nil
+			},
+			expected: "API key has no DC suffix",
+		},
+		{
+			d:      "on http.NewRequest",
+			apiKey: "-%z",
 			onDo: func() (*http.Response, error) {
 				return nil, nil
 			},
 			expected: "error creating request",
 		},
 		{
-			d:  "on clientOperations.Do",
-			dc: "x",
+			d:      "on clientOperations.Do",
+			apiKey: "-x",
 			onDo: func() (*http.Response, error) {
 				return nil, errors.New("")
 			},
 			expected: "error sending request",
 		},
 		{
-			d:  "on non-OK response",
-			dc: "x",
+			d:      "on non-OK response",
+			apiKey: "-x",
 			onDo: func() (*http.Response, error) {
-				return &http.Response{StatusCode: 400}, nil
+				return newClientTestResponse(400), nil
 			},
 			expected: "error received from server",
 		},
@@ -83,7 +91,7 @@ func TestMailChimpClient_SubscribeUserErrors(t *testing.T) {
 
 	for _, tc := range testCases {
 		ops := &testClientOperations{onDo: tc.onDo}
-		config := MailChimpConfig{dc: tc.dc}
+		config := MailChimpConfig{apiKey: tc.apiKey}
 
 		client := &mailChimpClient{ops: ops, config: config}
 
@@ -105,7 +113,7 @@ func (r *testClientOperations) Do(req *http.Request) (*http.Response, error) {
 	if r.onDo != nil {
 		return r.onDo()
 	}
-	return &http.Response{}, nil
+	return newClientTestResponse(200), nil
 }
 
 func read(r io.Reader) (string, error) {
@@ -113,4 +121,16 @@ func read(r io.Reader) (string, error) {
 	n, err := r.Read(b)
 	s := string(b[:n])
 	return s, err
+}
+
+func newClientTestResponse(statusCode int) *http.Response {
+	return &http.Response{StatusCode: statusCode, Body: &clientTestResponseBody{strings.NewReader("")}}
+}
+
+type clientTestResponseBody struct {
+	io.Reader
+}
+
+func (r *clientTestResponseBody) Close() error {
+	return nil
 }

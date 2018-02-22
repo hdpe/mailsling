@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 type Repository interface {
@@ -41,20 +43,27 @@ var UserStatuses = userStatusSet{"new", "welcomed"}
 func (r *DBRepository) GetUsersNotWelcomed() ([]User, error) {
 	var result []User
 	err := r.doInTx(false, func(tx *sql.Tx) error {
-		rows, err := tx.Query("select id, email, status, welcome_time from users")
+		rows, err := tx.Query("select id, email, status from users")
+		defer rows.Close()
 		if err != nil {
 			return fmt.Errorf("couldn't perform insert: %v", err)
 		}
 		for rows.Next() {
 			var (
-				id          *int
-				email       *string
-				status      *string
-				welcomeTime *time.Time
+				id     int
+				email  string
+				status string
+				//welcomeTime time.Time
 			)
 
-			rows.Scan(email)
-			result = append(result, User{ID: *id, Email: *email, Status: UserStatuses.Get(*status), WelcomeTime: *welcomeTime})
+			err = rows.Scan(&id, &email, &status /*&welcomeTime*/)
+			if err != nil {
+				return fmt.Errorf("error retrieving row: %v", err)
+			}
+			result = append(result, User{ID: id, Email: email, Status: UserStatuses.Get(status) /*WelcomeTime: welcomeTime*/})
+		}
+		if err = rows.Err(); err != nil {
+			return fmt.Errorf("error iterating rows: %v", err)
 		}
 		return nil
 	})
@@ -75,10 +84,10 @@ func (r *DBRepository) InsertUser(user User) error {
 
 func (r *DBRepository) UpdateUser(user User) error {
 	return r.doInTx(false, func(tx *sql.Tx) error {
-		_, err := tx.Exec("UPDATE users SET email=?, status=?, welcome_time=? WHERE id=?", user.Email,
-			UserStatuses.Get("new"), user.WelcomeTime, user.ID)
+		_, err := tx.Exec("UPDATE users SET email=?, status=? WHERE id=?", user.Email,
+			UserStatuses.Get("new"), user.ID)
 		if err != nil {
-			return fmt.Errorf("couldn't perform insert: %v", err)
+			return fmt.Errorf("couldn't perform update: %v", err)
 		} else {
 			return nil
 		}
@@ -104,7 +113,9 @@ func (r *DBRepository) doInTx(readOnly bool, action func(tx *sql.Tx) error) erro
 		tx.Rollback()
 	} else {
 		err = tx.Commit()
-		fmt.Errorf("couldn't commit tx: %v", err)
+		if err != nil {
+			err = fmt.Errorf("couldn't commit tx: %v", err)
+		}
 	}
 
 	return err
