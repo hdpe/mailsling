@@ -3,6 +3,7 @@ package mailer
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 )
 
 type SignUpMessage struct {
@@ -27,17 +28,19 @@ func (r *Mailer) Poll() error {
 
 		signUp, err := parseSignUp(msg.GetText())
 		if err != nil {
-			return fmt.Errorf("couldn't parse sign up from message %q: %v", msg.GetText(), err)
+			log.Printf("couldn't parse sign up from message %q: %v", msg.GetText(), err)
+			continue
 		}
 
 		err = r.repo.InsertUser(User{Email: signUp.Email})
 		if err != nil {
-			return fmt.Errorf("couldn't insert sign up to DB: %v", err)
+			log.Printf("couldn't insert sign up to DB: %v", err)
+			continue
 		}
 
 		err = r.ms.MessageProcessed(msg)
 		if err != nil {
-			return fmt.Errorf("couldn't mark message processed: %v", err)
+			log.Printf("couldn't mark message processed: %v", err)
 		}
 	}
 
@@ -72,10 +75,24 @@ func NewMailer(ms MessageSource, repo Repository, client Client) *Mailer {
 	return &Mailer{ms, repo, client}
 }
 
-func parseSignUp(str string) (SignUpMessage, error) {
-	var msg SignUpMessage
+func parseSignUp(str string) (msg SignUpMessage, err error) {
+	var parsed SignUpMessage
 
-	err := json.Unmarshal([]byte(str), &msg)
+	err = json.Unmarshal([]byte(str), &parsed)
 
-	return msg, err
+	if err != nil {
+		return
+	}
+
+	if parsed.Type != "sign_up" {
+		err = fmt.Errorf("message is not a sign up message")
+		return
+	}
+
+	if parsed.Email == "" {
+		err = fmt.Errorf("message has no email")
+		return
+	}
+
+	return parsed, err
 }

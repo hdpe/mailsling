@@ -9,30 +9,91 @@ import (
 )
 
 func TestMailer_Poll(t *testing.T) {
-
-	message0 := &testMessage{Text: `{"type":"sign_up","email":"x"}`}
-	message1 := &testMessage{Text: `{"type":"sign_up","email":"y"}`}
-
-	ms := &testMessageSource{messages: []Message{message0, message1}}
-	repo := &pollTestRepository{}
-	mailer := &Mailer{ms: ms, repo: repo}
-
-	mailer.Poll()
-
-	if expected, actual := 2, len(repo.users); expected != actual {
-		t.Fatalf("Expected %d sign ups, was %d", expected, actual)
+	testCases := []struct {
+		d                              string
+		getNextMessageResults          []messageResult
+		expectedRepositoryInserted     []User
+		repositoryInsertResults        map[User]error
+		expectedMessageSourceProcessed []Message
+		expected                       string
+	}{
+		{
+			d: "on messages polled successfully",
+			getNextMessageResults: []messageResult{
+				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
+				{msg: &testMessage{Text: `{"type":"sign_up","email":"y"}`}},
+				{},
+			},
+			expectedRepositoryInserted: []User{
+				{Email: "x"},
+				{Email: "y"},
+			},
+			expectedMessageSourceProcessed: []Message{
+				&testMessage{Text: `{"type":"sign_up","email":"x"}`},
+				&testMessage{Text: `{"type":"sign_up","email":"y"}`},
+			},
+			expected: "",
+		},
+		{
+			d: "on get next message error",
+			getNextMessageResults: []messageResult{
+				{err: errors.New("")},
+				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
+			},
+			expectedRepositoryInserted:     nil,
+			expectedMessageSourceProcessed: nil,
+			expected:                       "couldn't get next message",
+		},
+		{
+			d: "on couldn't parse sign up",
+			getNextMessageResults: []messageResult{
+				{msg: &testMessage{Text: "{}"}},
+				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
+				{},
+			},
+			expectedRepositoryInserted:     []User{{Email: "x"}},
+			expectedMessageSourceProcessed: []Message{&testMessage{Text: `{"type":"sign_up","email":"x"}`}},
+			expected:                       "",
+		},
+		{
+			d: "on repository insert error",
+			getNextMessageResults: []messageResult{
+				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
+				{msg: &testMessage{Text: `{"type":"sign_up","email":"y"}`}},
+				{},
+			},
+			repositoryInsertResults: map[User]error{
+				User{Email: "x"}: errors.New(""),
+			},
+			expectedRepositoryInserted: []User{
+				{Email: "x"},
+				{Email: "y"},
+			},
+			expectedMessageSourceProcessed: []Message{&testMessage{Text: `{"type":"sign_up","email":"y"}`}},
+			expected:                       "",
+		},
 	}
-	if expected, actual := "x", repo.users[0].Email; expected != actual {
-		t.Errorf("Expected first persisted sign up email %s, was %s", expected, actual)
-	}
-	if processed := ms.processedMessages[message0]; !processed {
-		t.Errorf("Expected first Message to be processed")
-	}
-	if expected, actual := "y", repo.users[1].Email; expected != actual {
-		t.Errorf("Expected second persisted sign up email %s, was %s", expected, actual)
-	}
-	if processed := ms.processedMessages[message1]; !processed {
-		t.Errorf("Expected second Message to be processed")
+
+	for _, tc := range testCases {
+		ms := &testMessageSource{messageResults: tc.getNextMessageResults}
+		repo := &pollTestRepository{insertResults: tc.repositoryInsertResults}
+
+		mailer := &Mailer{ms: ms, repo: repo}
+
+		err := mailer.Poll()
+
+		if !reflect.DeepEqual(tc.expectedRepositoryInserted, repo.users) {
+			t.Errorf("%s expected repo to insert %v, actually %v", tc.d, tc.expectedRepositoryInserted, repo.users)
+		}
+		if !reflect.DeepEqual(tc.expectedMessageSourceProcessed, ms.processed) {
+			t.Errorf("%s expected message source to process %v, actually %v", tc.d, tc.expectedMessageSourceProcessed,
+				ms.processed)
+		}
+		if err != nil && tc.expected == "" {
+			t.Errorf("%s didn't expect error but got %v", tc.d, err)
+		} else if errorString := fmt.Sprintf("%v", err); strings.Index(errorString, tc.expected) != 0 {
+			t.Errorf("%s expected error %v, actually %v", tc.d, tc.expected, err)
+		}
 	}
 }
 
@@ -109,44 +170,62 @@ func TestMailer_Subscribe(t *testing.T) {
 }
 
 func TestParseSignUp(t *testing.T) {
-	str := `{"type":"sign_up","email":"x@y.com"}`
-
-	signUp, err := parseSignUp(str)
-
-	if err != nil {
-		t.Fatalf("error parsing json: %s", err)
+	testCases := []struct {
+		d              string
+		json           string
+		expectedSignUp SignUpMessage
+		expectedError  string
+	}{
+		{
+			d:              "on valid json",
+			json:           `{"type":"sign_up","email":"x"}`,
+			expectedSignUp: SignUpMessage{Type: "sign_up", Email: "x"},
+		},
+		{
+			d:             "on type not 'sign_up'",
+			json:          `{"type":"_","email":"x@y.com"}`,
+			expectedError: "message is not a sign up message",
+		},
+		{
+			d:             "on no email",
+			json:          `{"type":"sign_up"}`,
+			expectedError: "message has no email",
+		},
 	}
 
-	if expected, actual := "sign_up", signUp.Type; expected != actual {
-		t.Errorf("Expected %s, was %s", expected, actual)
-	}
-	if expected, actual := "x@y.com", signUp.Email; expected != actual {
-		t.Errorf("Expected %s, was %s", expected, actual)
+	for _, tc := range testCases {
+		signUp, err := parseSignUp(tc.json)
+
+		if !reflect.DeepEqual(tc.expectedSignUp, signUp) {
+			t.Errorf("%s expected %v, actually %v", tc.d, tc.expectedSignUp, signUp)
+		}
+		if errorString := fmt.Sprintf("%v", err); strings.Index(errorString, tc.expectedError) != 0 {
+			t.Errorf("%s expected error %v, actually %v", tc.d, tc.expectedError, err)
+		}
 	}
 }
 
 // mocks
 
+type messageResult struct {
+	msg Message
+	err error
+}
+
 type testMessageSource struct {
-	idx               int
-	messages          []Message
-	processedMessages map[Message]bool
+	idx            int
+	messageResults []messageResult
+	processed      []Message
 }
 
 func (ms *testMessageSource) GetNextMessage() (Message, error) {
-	var msg Message
-	if ms.idx < len(ms.messages) {
-		msg = ms.messages[ms.idx]
-		ms.idx++
-	}
-	return msg, nil
+	res := ms.messageResults[ms.idx]
+	ms.idx++
+	return res.msg, res.err
 }
 
 func (ms *testMessageSource) MessageProcessed(msg Message) error {
-	if ms.processedMessages == nil {
-		ms.processedMessages = map[Message]bool{}
-	}
-	ms.processedMessages[msg] = true
+	ms.processed = append(ms.processed, msg)
 	return nil
 }
 
@@ -159,28 +238,29 @@ func (msg *testMessage) GetText() string {
 }
 
 type pollTestRepository struct {
-	users []*User
+	insertResults map[User]error
+	users         []User
 }
 
 func (r *pollTestRepository) GetUsersNotWelcomed() ([]User, error) {
 	var result []User
 	for _, u := range r.users {
 		if u.Status == UserStatuses.Get("new") {
-			result = append(result, *u)
+			result = append(result, u)
 		}
 	}
 	return result, nil
 }
 
 func (r *pollTestRepository) InsertUser(user User) error {
-	r.users = append(r.users, &user)
-	return nil
+	r.users = append(r.users, user)
+	return r.insertResults[user]
 }
 
 func (r *pollTestRepository) UpdateUser(user User) error {
 	for i, u := range r.users {
 		if u.ID == user.ID {
-			r.users[i] = &user
+			r.users[i] = user
 			return nil
 		}
 	}
