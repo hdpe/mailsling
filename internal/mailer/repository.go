@@ -11,6 +11,7 @@ import (
 
 type Repository interface {
 	GetUsersNotSubscribed() ([]User, error)
+	GetUserByEmail(email string) (User, bool, error)
 	InsertUser(user User) error
 	UpdateUser(user User) error
 }
@@ -43,24 +44,20 @@ var UserStatuses = userStatusSet{"new", "subscribed"}
 func (r *DBRepository) GetUsersNotSubscribed() ([]User, error) {
 	var result []User
 	err := r.doInTx(false, func(tx *sql.Tx) error {
-		rows, err := tx.Query("select id, email, status from users")
+		rows, err := tx.Query("select id, email, status from users where status != ?",
+			UserStatuses.Get("subscribed"))
+
 		defer rows.Close()
+
 		if err != nil {
-			return fmt.Errorf("couldn't perform insert: %v", err)
+			return fmt.Errorf("couldn't get row: %v", err)
 		}
 		for rows.Next() {
-			var (
-				id     int
-				email  string
-				status string
-				//welcomeTime time.Time
-			)
-
-			err = rows.Scan(&id, &email, &status /*&welcomeTime*/)
+			user, err := mapRow(rows)
 			if err != nil {
 				return fmt.Errorf("error retrieving row: %v", err)
 			}
-			result = append(result, User{ID: id, Email: email, Status: UserStatuses.Get(status) /*WelcomeTime: welcomeTime*/})
+			result = append(result, user)
 		}
 		if err = rows.Err(); err != nil {
 			return fmt.Errorf("error iterating rows: %v", err)
@@ -68,6 +65,33 @@ func (r *DBRepository) GetUsersNotSubscribed() ([]User, error) {
 		return nil
 	})
 	return result, err
+}
+
+func (r *DBRepository) GetUserByEmail(email string) (User, bool, error) {
+	var result User
+	var found bool
+	err := r.doInTx(false, func(tx *sql.Tx) error {
+		rows, err := tx.Query("select id, email, status from users where email = ?",
+			email)
+
+		defer rows.Close()
+
+		if err != nil {
+			return fmt.Errorf("couldn't get row: %v", err)
+		}
+		if rows.Next() {
+			found = true
+			result, err = mapRow(rows)
+			if err != nil {
+				return fmt.Errorf("error retrieving row: %v", err)
+			}
+		}
+		if err = rows.Err(); err != nil {
+			return fmt.Errorf("error iterating rows: %v", err)
+		}
+		return nil
+	})
+	return result, found, err
 }
 
 func (r *DBRepository) InsertUser(user User) error {
@@ -119,6 +143,25 @@ func (r *DBRepository) doInTx(readOnly bool, action func(tx *sql.Tx) error) erro
 	}
 
 	return err
+}
+
+func mapRow(rows *sql.Rows) (User, error) {
+	var (
+		id     int
+		email  string
+		status string
+		//welcomeTime time.Time
+
+		user User
+	)
+
+	err := rows.Scan(&id, &email, &status /*&welcomeTime*/)
+
+	if err == nil {
+		user = User{ID: id, Email: email, Status: UserStatuses.Get(status) /*WelcomeTime: welcomeTime*/}
+	}
+
+	return user, err
 }
 
 func NewRepository(dsn string) (*DBRepository, error) {

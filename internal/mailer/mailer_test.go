@@ -10,12 +10,13 @@ import (
 
 func TestMailer_Poll(t *testing.T) {
 	testCases := []struct {
-		label                          string
-		getNextMessageResults          []messageResult
-		expectedRepositoryInserted     []User
-		repositoryInsertResults        map[User]error
-		expectedMessageSourceProcessed []Message
-		expected                       string
+		label                           string
+		getNextMessageResults           []messageResult
+		expectedRepositoryInserted      []User
+		repositoryGetUserByEmailResults map[string]userResult
+		repositoryInsertResults         map[User]error
+		expectedMessageSourceProcessed  []Message
+		expected                        string
 	}{
 		{
 			label: "on messages polled successfully",
@@ -56,6 +57,39 @@ func TestMailer_Poll(t *testing.T) {
 			expected:                       "",
 		},
 		{
+			label: "on repository get returns user",
+			getNextMessageResults: []messageResult{
+				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
+				{},
+			},
+			repositoryGetUserByEmailResults: map[string]userResult{
+				"x": {found: true},
+			},
+			expectedRepositoryInserted: nil,
+			expectedMessageSourceProcessed: []Message{
+				&testMessage{Text: `{"type":"sign_up","email":"x"}`},
+			},
+			expected: "",
+		},
+		{
+			label: "on repository get error",
+			getNextMessageResults: []messageResult{
+				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
+				{msg: &testMessage{Text: `{"type":"sign_up","email":"y"}`}},
+				{},
+			},
+			repositoryGetUserByEmailResults: map[string]userResult{
+				"x": {err: errors.New("")},
+			},
+			expectedRepositoryInserted: []User{
+				{Email: "y"},
+			},
+			expectedMessageSourceProcessed: []Message{
+				&testMessage{Text: `{"type":"sign_up","email":"y"}`},
+			},
+			expected: "",
+		},
+		{
 			label: "on repository insert error",
 			getNextMessageResults: []messageResult{
 				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
@@ -76,7 +110,10 @@ func TestMailer_Poll(t *testing.T) {
 
 	for _, tc := range testCases {
 		ms := &testMessageSource{messageResults: tc.getNextMessageResults}
-		repo := &pollTestRepository{insertResults: tc.repositoryInsertResults}
+		repo := &pollTestRepository{
+			getUserByEmailResults: tc.repositoryGetUserByEmailResults,
+			insertResults:         tc.repositoryInsertResults,
+		}
 
 		mailer := &Mailer{ms: ms, repo: repo}
 
@@ -212,6 +249,12 @@ type messageResult struct {
 	err error
 }
 
+type userResult struct {
+	user  User
+	found bool
+	err   error
+}
+
 type testMessageSource struct {
 	idx            int
 	messageResults []messageResult
@@ -238,8 +281,9 @@ func (msg *testMessage) GetText() string {
 }
 
 type pollTestRepository struct {
-	insertResults map[User]error
-	users         []User
+	getUserByEmailResults map[string]userResult
+	insertResults         map[User]error
+	users                 []User
 }
 
 func (r *pollTestRepository) GetUsersNotSubscribed() ([]User, error) {
@@ -250,6 +294,11 @@ func (r *pollTestRepository) GetUsersNotSubscribed() ([]User, error) {
 		}
 	}
 	return result, nil
+}
+
+func (r *pollTestRepository) GetUserByEmail(email string) (User, bool, error) {
+	result := r.getUserByEmailResults[email]
+	return result.user, result.found, result.err
 }
 
 func (r *pollTestRepository) InsertUser(user User) error {

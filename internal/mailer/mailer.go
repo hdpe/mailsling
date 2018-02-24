@@ -32,10 +32,21 @@ func (m *Mailer) Poll() error {
 			continue
 		}
 
-		err = m.repo.InsertUser(User{Email: signUp.Email})
+		_, found, err := m.repo.GetUserByEmail(signUp.Email)
+
 		if err != nil {
-			log.Printf("couldn't insert sign up to DB: %v", err)
+			log.Printf("couldn't get user by email from DB: %v", err)
 			continue
+		}
+
+		if found {
+			log.Printf("user %q already known - skipping", signUp.Email)
+		} else {
+			err = m.repo.InsertUser(User{Email: signUp.Email})
+			if err != nil {
+				log.Printf("couldn't insert sign up to DB: %v", err)
+				continue
+			}
 		}
 
 		err = m.ms.MessageProcessed(msg)
