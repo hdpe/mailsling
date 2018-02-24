@@ -50,13 +50,13 @@ func TestMailChimpClient_SubscribeUser(t *testing.T) {
 
 func TestMailChimpClient_SubscribeUserErrors(t *testing.T) {
 	testCases := []struct {
-		d        string
+		label    string
 		apiKey   string
 		onDo     func() (*http.Response, error)
 		expected string
 	}{
 		{
-			d:      "on API key has no dc suffix",
+			label:  "on API key has no dc suffix",
 			apiKey: "x",
 			onDo: func() (*http.Response, error) {
 				return newClientTestResponse(200), nil
@@ -64,7 +64,7 @@ func TestMailChimpClient_SubscribeUserErrors(t *testing.T) {
 			expected: "API key has no DC suffix",
 		},
 		{
-			d:      "on http.NewRequest",
+			label:  "on http.NewRequest",
 			apiKey: "-%z",
 			onDo: func() (*http.Response, error) {
 				return nil, nil
@@ -72,7 +72,7 @@ func TestMailChimpClient_SubscribeUserErrors(t *testing.T) {
 			expected: "error creating request",
 		},
 		{
-			d:      "on clientOperations.Do",
+			label:  "on clientOperations.Do",
 			apiKey: "-x",
 			onDo: func() (*http.Response, error) {
 				return nil, errors.New("")
@@ -80,7 +80,7 @@ func TestMailChimpClient_SubscribeUserErrors(t *testing.T) {
 			expected: "error sending request",
 		},
 		{
-			d:      "on non-OK response",
+			label:  "on non-OK response",
 			apiKey: "-x",
 			onDo: func() (*http.Response, error) {
 				return newClientTestResponse(400), nil
@@ -98,7 +98,7 @@ func TestMailChimpClient_SubscribeUserErrors(t *testing.T) {
 		err := client.SubscribeUser(User{Email: "a@b.com"})
 
 		if err == nil || strings.Index(fmt.Sprintf("%s", err), tc.expected) != 0 {
-			t.Errorf("Expected error %s %q, actually %q", tc.d, tc.expected, err)
+			t.Errorf("Expected error %s %q, actually %q", tc.label, tc.expected, err)
 		}
 	}
 }
@@ -108,10 +108,10 @@ type testClientOperations struct {
 	onDo     func() (*http.Response, error)
 }
 
-func (r *testClientOperations) Do(req *http.Request) (*http.Response, error) {
-	r.received = append(r.received, req)
-	if r.onDo != nil {
-		return r.onDo()
+func (ops *testClientOperations) Do(req *http.Request) (*http.Response, error) {
+	ops.received = append(ops.received, req)
+	if ops.onDo != nil {
+		return ops.onDo()
 	}
 	return newClientTestResponse(200), nil
 }

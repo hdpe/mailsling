@@ -10,7 +10,7 @@ import (
 
 func TestMailer_Poll(t *testing.T) {
 	testCases := []struct {
-		d                              string
+		label                          string
 		getNextMessageResults          []messageResult
 		expectedRepositoryInserted     []User
 		repositoryInsertResults        map[User]error
@@ -18,7 +18,7 @@ func TestMailer_Poll(t *testing.T) {
 		expected                       string
 	}{
 		{
-			d: "on messages polled successfully",
+			label: "on messages polled successfully",
 			getNextMessageResults: []messageResult{
 				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
 				{msg: &testMessage{Text: `{"type":"sign_up","email":"y"}`}},
@@ -35,7 +35,7 @@ func TestMailer_Poll(t *testing.T) {
 			expected: "",
 		},
 		{
-			d: "on get next message error",
+			label: "on get next message error",
 			getNextMessageResults: []messageResult{
 				{err: errors.New("")},
 				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
@@ -45,7 +45,7 @@ func TestMailer_Poll(t *testing.T) {
 			expected:                       "couldn't get next message",
 		},
 		{
-			d: "on couldn't parse sign up",
+			label: "on couldn't parse sign up",
 			getNextMessageResults: []messageResult{
 				{msg: &testMessage{Text: "{}"}},
 				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
@@ -56,7 +56,7 @@ func TestMailer_Poll(t *testing.T) {
 			expected:                       "",
 		},
 		{
-			d: "on repository insert error",
+			label: "on repository insert error",
 			getNextMessageResults: []messageResult{
 				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
 				{msg: &testMessage{Text: `{"type":"sign_up","email":"y"}`}},
@@ -83,23 +83,23 @@ func TestMailer_Poll(t *testing.T) {
 		err := mailer.Poll()
 
 		if !reflect.DeepEqual(tc.expectedRepositoryInserted, repo.users) {
-			t.Errorf("%s expected repo to insert %v, actually %v", tc.d, tc.expectedRepositoryInserted, repo.users)
+			t.Errorf("%s expected repo to insert %v, actually %v", tc.label, tc.expectedRepositoryInserted, repo.users)
 		}
 		if !reflect.DeepEqual(tc.expectedMessageSourceProcessed, ms.processed) {
-			t.Errorf("%s expected message source to process %v, actually %v", tc.d, tc.expectedMessageSourceProcessed,
+			t.Errorf("%s expected message source to process %v, actually %v", tc.label, tc.expectedMessageSourceProcessed,
 				ms.processed)
 		}
 		if err != nil && tc.expected == "" {
-			t.Errorf("%s didn't expect error but got %v", tc.d, err)
+			t.Errorf("%s didn't expect error but got %v", tc.label, err)
 		} else if errorString := fmt.Sprintf("%v", err); strings.Index(errorString, tc.expected) != 0 {
-			t.Errorf("%s expected error %v, actually %v", tc.d, tc.expected, err)
+			t.Errorf("%s expected error %v, actually %v", tc.label, tc.expected, err)
 		}
 	}
 }
 
 func TestMailer_Subscribe(t *testing.T) {
 	testCases := []struct {
-		d                          string
+		label                      string
 		repositoryUsers            []User
 		repositoryGetError         error
 		clientError                error
@@ -109,14 +109,14 @@ func TestMailer_Subscribe(t *testing.T) {
 		expected                   string
 	}{
 		{
-			d:                          "on repository users",
+			label:                      "on repository users",
 			repositoryUsers:            []User{{Email: "x"}},
 			expectedClientReceived:     []User{{Email: "x"}},
 			expectedRepositoryReceived: []User{{Email: "x", Status: UserStatuses.Get("subscribed")}},
 			expected:                   "",
 		},
 		{
-			d:                          "on repository get error",
+			label:                      "on repository get error",
 			repositoryUsers:            []User{{}},
 			repositoryGetError:         errors.New("x"),
 			expectedClientReceived:     nil,
@@ -124,7 +124,7 @@ func TestMailer_Subscribe(t *testing.T) {
 			expected:                   "couldn't get users to be subscribed",
 		},
 		{
-			d:                          "on client error",
+			label:                      "on client error",
 			repositoryUsers:            []User{{}},
 			clientError:                errors.New("x"),
 			expectedClientReceived:     []User{{}},
@@ -132,7 +132,7 @@ func TestMailer_Subscribe(t *testing.T) {
 			expected:                   "notify of new user failed",
 		},
 		{
-			d:                          "on repository update error",
+			label:                      "on repository update error",
 			repositoryUsers:            []User{{}},
 			repositoryUpdateError:      errors.New("x"),
 			expectedClientReceived:     []User{{}},
@@ -154,16 +154,16 @@ func TestMailer_Subscribe(t *testing.T) {
 		err := mailer.Subscribe()
 
 		if tc.expected != "" && (err == nil || strings.Index(fmt.Sprintf("%v", err), tc.expected) != 0) {
-			t.Errorf("%s expected result %q, actually %q", tc.d, tc.expected, err)
+			t.Errorf("%s expected result %q, actually %q", tc.label, tc.expected, err)
 		}
 		if tc.expected == "" && err != nil {
-			t.Errorf("%s expected nil result, actually %q", tc.d, err)
+			t.Errorf("%s expected nil result, actually %q", tc.label, err)
 		}
 		if !reflect.DeepEqual(tc.expectedClientReceived, client.received) {
-			t.Errorf("%s expected client to receive %v, actually %v", tc.d, tc.expectedClientReceived, client.received)
+			t.Errorf("%s expected client to receive %v, actually %v", tc.label, tc.expectedClientReceived, client.received)
 		}
 		if !reflect.DeepEqual(tc.expectedRepositoryReceived, repo.updateUserReceived) {
-			t.Errorf("%s expected repository to receive %v, actually %v", tc.d, tc.expectedRepositoryReceived,
+			t.Errorf("%s expected repository to receive %v, actually %v", tc.label, tc.expectedRepositoryReceived,
 				repo.updateUserReceived)
 		}
 	}
@@ -171,23 +171,23 @@ func TestMailer_Subscribe(t *testing.T) {
 
 func TestParseSignUp(t *testing.T) {
 	testCases := []struct {
-		d              string
+		label          string
 		json           string
 		expectedSignUp SignUpMessage
 		expectedError  string
 	}{
 		{
-			d:              "on valid json",
+			label:          "on valid json",
 			json:           `{"type":"sign_up","email":"x"}`,
 			expectedSignUp: SignUpMessage{Type: "sign_up", Email: "x"},
 		},
 		{
-			d:             "on type not 'sign_up'",
+			label:         "on type not 'sign_up'",
 			json:          `{"type":"_","email":"x@y.com"}`,
 			expectedError: "message is not a sign up message",
 		},
 		{
-			d:             "on no email",
+			label:         "on no email",
 			json:          `{"type":"sign_up"}`,
 			expectedError: "message has no email",
 		},
@@ -197,10 +197,10 @@ func TestParseSignUp(t *testing.T) {
 		signUp, err := parseSignUp(tc.json)
 
 		if !reflect.DeepEqual(tc.expectedSignUp, signUp) {
-			t.Errorf("%s expected %v, actually %v", tc.d, tc.expectedSignUp, signUp)
+			t.Errorf("%s expected %v, actually %v", tc.label, tc.expectedSignUp, signUp)
 		}
 		if errorString := fmt.Sprintf("%v", err); strings.Index(errorString, tc.expectedError) != 0 {
-			t.Errorf("%s expected error %v, actually %v", tc.d, tc.expectedError, err)
+			t.Errorf("%s expected error %v, actually %v", tc.label, tc.expectedError, err)
 		}
 	}
 }

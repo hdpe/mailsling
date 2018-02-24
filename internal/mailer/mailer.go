@@ -17,9 +17,9 @@ type Mailer struct {
 	client Client
 }
 
-func (r *Mailer) Poll() error {
+func (m *Mailer) Poll() error {
 	for {
-		msg, err := r.ms.GetNextMessage()
+		msg, err := m.ms.GetNextMessage()
 		if err != nil {
 			return fmt.Errorf("couldn't get next message from queue: %v", err)
 		} else if msg == nil {
@@ -32,13 +32,13 @@ func (r *Mailer) Poll() error {
 			continue
 		}
 
-		err = r.repo.InsertUser(User{Email: signUp.Email})
+		err = m.repo.InsertUser(User{Email: signUp.Email})
 		if err != nil {
 			log.Printf("couldn't insert sign up to DB: %v", err)
 			continue
 		}
 
-		err = r.ms.MessageProcessed(msg)
+		err = m.ms.MessageProcessed(msg)
 		if err != nil {
 			log.Printf("couldn't mark message processed: %v", err)
 		}
@@ -47,22 +47,22 @@ func (r *Mailer) Poll() error {
 	return nil
 }
 
-func (r *Mailer) Subscribe() error {
-	users, err := r.repo.GetUsersNotSubscribed()
+func (m *Mailer) Subscribe() error {
+	users, err := m.repo.GetUsersNotSubscribed()
 
 	if err != nil {
 		return fmt.Errorf("couldn't get users to be subscribed: %v", err)
 	}
 
 	for _, u := range users {
-		err = r.client.SubscribeUser(u)
+		err = m.client.SubscribeUser(u)
 		if err != nil {
 			return fmt.Errorf("notify of new user failed: %v", err)
 		}
 
 		u.Status = UserStatuses.Get("subscribed")
 
-		err = r.repo.UpdateUser(u)
+		err = m.repo.UpdateUser(u)
 		if err != nil {
 			return fmt.Errorf("couldn't update user: %v", err)
 		}

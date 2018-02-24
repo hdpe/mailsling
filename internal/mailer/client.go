@@ -36,19 +36,19 @@ type MailChimpConfig struct {
 	listID string
 }
 
-func (r MailChimpConfig) NewClient() Client {
-	return &mailChimpClient{ops: &http.Client{}, config: r}
+func (config MailChimpConfig) NewClient() Client {
+	return &mailChimpClient{ops: &http.Client{}, config: config}
 }
 
-func (r *mailChimpClient) SubscribeUser(user User) error {
+func (c *mailChimpClient) SubscribeUser(user User) error {
 	// https://developer.mailchimp.com/documentation/mailchimp/guides/manage-subscribers-with-the-mailchimp-api/
-	keyParts := strings.Split(r.config.apiKey, "-")
+	keyParts := strings.Split(c.config.apiKey, "-")
 	if len(keyParts) < 2 {
 		return fmt.Errorf("API key has no DC suffix")
 	}
 	dc := keyParts[1]
 
-	url := fmt.Sprintf("https://%s.api.mailchimp.com/3.0/lists/%s/members", dc, r.config.listID)
+	url := fmt.Sprintf("https://%s.api.mailchimp.com/3.0/lists/%s/members", dc, c.config.listID)
 
 	payload := postListMembersRequest{Email: user.Email, Status: "subscribed"}
 	b, err := json.Marshal(payload)
@@ -61,9 +61,9 @@ func (r *mailChimpClient) SubscribeUser(user User) error {
 		return fmt.Errorf("error creating request: %v", err)
 	}
 	req.Header["Content-Type"] = []string{"application/json"}
-	req.SetBasicAuth("IGNORED", r.config.apiKey)
+	req.SetBasicAuth("IGNORED", c.config.apiKey)
 
-	resp, err := r.ops.Do(req)
+	resp, err := c.ops.Do(req)
 	if err != nil {
 		return fmt.Errorf("error sending request: %v", err)
 	}
