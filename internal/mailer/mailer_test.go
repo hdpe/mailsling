@@ -112,7 +112,7 @@ func TestMailer_Subscribe(t *testing.T) {
 			d:                          "on repository users",
 			repositoryUsers:            []User{{Email: "x"}},
 			expectedClientReceived:     []User{{Email: "x"}},
-			expectedRepositoryReceived: []User{{Email: "x", Status: UserStatuses.Get("welcomed")}},
+			expectedRepositoryReceived: []User{{Email: "x", Status: UserStatuses.Get("subscribed")}},
 			expected:                   "",
 		},
 		{
@@ -121,7 +121,7 @@ func TestMailer_Subscribe(t *testing.T) {
 			repositoryGetError:         errors.New("x"),
 			expectedClientReceived:     nil,
 			expectedRepositoryReceived: nil,
-			expected:                   "couldn't get users to be welcomed",
+			expected:                   "couldn't get users to be subscribed",
 		},
 		{
 			d:                          "on client error",
@@ -136,16 +136,16 @@ func TestMailer_Subscribe(t *testing.T) {
 			repositoryUsers:            []User{{}},
 			repositoryUpdateError:      errors.New("x"),
 			expectedClientReceived:     []User{{}},
-			expectedRepositoryReceived: []User{{Status: UserStatuses.Get("welcomed")}},
+			expectedRepositoryReceived: []User{{Status: UserStatuses.Get("subscribed")}},
 			expected:                   "couldn't update user",
 		},
 	}
 
 	for _, tc := range testCases {
 		repo := &subscribeTestRepository{
-			onGetUsersNotWelcomedUsers: tc.repositoryUsers,
-			onGetUsersNotWelcomedError: tc.repositoryGetError,
-			onUpdateUserError:          tc.repositoryUpdateError,
+			onGetUsersNotSubscribedUsers: tc.repositoryUsers,
+			onGetUsersNotSubscribedError: tc.repositoryGetError,
+			onUpdateUserError:            tc.repositoryUpdateError,
 		}
 		client := &testClient{shouldReturnError: tc.clientError}
 
@@ -242,7 +242,7 @@ type pollTestRepository struct {
 	users         []User
 }
 
-func (r *pollTestRepository) GetUsersNotWelcomed() ([]User, error) {
+func (r *pollTestRepository) GetUsersNotSubscribed() ([]User, error) {
 	var result []User
 	for _, u := range r.users {
 		if u.Status == UserStatuses.Get("new") {
@@ -269,17 +269,17 @@ func (r *pollTestRepository) UpdateUser(user User) error {
 
 type subscribeTestRepository struct {
 	Repository
-	onGetUsersNotWelcomedUsers []User
-	onGetUsersNotWelcomedError error
-	updateUserReceived         []User
-	onUpdateUserError          error
+	onGetUsersNotSubscribedUsers []User
+	onGetUsersNotSubscribedError error
+	updateUserReceived           []User
+	onUpdateUserError            error
 }
 
-func (r *subscribeTestRepository) GetUsersNotWelcomed() ([]User, error) {
-	if r.onGetUsersNotWelcomedError != nil {
-		return nil, r.onGetUsersNotWelcomedError
+func (r *subscribeTestRepository) GetUsersNotSubscribed() ([]User, error) {
+	if r.onGetUsersNotSubscribedError != nil {
+		return nil, r.onGetUsersNotSubscribedError
 	} else {
-		return r.onGetUsersNotWelcomedUsers, nil
+		return r.onGetUsersNotSubscribedUsers, nil
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 )
 
 type Repository interface {
-	GetUsersNotWelcomed() ([]User, error)
+	GetUsersNotSubscribed() ([]User, error)
 	InsertUser(user User) error
 	UpdateUser(user User) error
 }
@@ -38,9 +38,9 @@ func (r userStatusSet) Get(name string) UserStatus {
 	panic(fmt.Sprintf("Unknown user status %q", name))
 }
 
-var UserStatuses = userStatusSet{"new", "welcomed"}
+var UserStatuses = userStatusSet{"new", "subscribed"}
 
-func (r *DBRepository) GetUsersNotWelcomed() ([]User, error) {
+func (r *DBRepository) GetUsersNotSubscribed() ([]User, error) {
 	var result []User
 	err := r.doInTx(false, func(tx *sql.Tx) error {
 		rows, err := tx.Query("select id, email, status from users")

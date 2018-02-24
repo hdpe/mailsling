@@ -48,10 +48,10 @@ func (r *Mailer) Poll() error {
 }
 
 func (r *Mailer) Subscribe() error {
-	users, err := r.repo.GetUsersNotWelcomed()
+	users, err := r.repo.GetUsersNotSubscribed()
 
 	if err != nil {
-		return fmt.Errorf("couldn't get users to be welcomed: %v", err)
+		return fmt.Errorf("couldn't get users to be subscribed: %v", err)
 	}
 
 	for _, u := range users {
@@ -60,7 +60,7 @@ func (r *Mailer) Subscribe() error {
 			return fmt.Errorf("notify of new user failed: %v", err)
 		}
 
-		u.Status = "welcomed"
+		u.Status = UserStatuses.Get("subscribed")
 
 		err = r.repo.UpdateUser(u)
 		if err != nil {
