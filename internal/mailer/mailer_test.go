@@ -115,7 +115,7 @@ func TestMailer_Poll(t *testing.T) {
 			insertResults:         tc.repositoryInsertResults,
 		}
 
-		mailer := &Mailer{ms: ms, repo: repo}
+		mailer := &Mailer{log: NOOPLog, ms: ms, repo: repo}
 
 		err := mailer.Poll()
 
@@ -139,34 +139,38 @@ func TestMailer_Subscribe(t *testing.T) {
 		label                      string
 		repositoryUsers            []User
 		repositoryGetError         error
-		clientError                error
+		clientError                map[User]error
 		repositoryUpdateError      error
 		expectedClientReceived     []User
 		expectedRepositoryReceived []User
 		expected                   string
 	}{
 		{
-			label:                      "on repository users",
-			repositoryUsers:            []User{{Email: "x"}},
-			expectedClientReceived:     []User{{Email: "x"}},
-			expectedRepositoryReceived: []User{{Email: "x", Status: UserStatuses.Get("subscribed")}},
-			expected:                   "",
+			label:                  "on repository users",
+			repositoryUsers:        []User{{Email: "x"}, {Email: "y"}},
+			expectedClientReceived: []User{{Email: "x"}, {Email: "y"}},
+			expectedRepositoryReceived: []User{
+				{Email: "x", Status: UserStatuses.Get("subscribed")},
+				{Email: "y", Status: UserStatuses.Get("subscribed")},
+			},
+			expected: "",
 		},
 		{
 			label:                      "on repository get error",
-			repositoryUsers:            []User{{}},
 			repositoryGetError:         errors.New("x"),
 			expectedClientReceived:     nil,
 			expectedRepositoryReceived: nil,
 			expected:                   "couldn't get users to be subscribed",
 		},
 		{
-			label:                      "on client error",
-			repositoryUsers:            []User{{}},
-			clientError:                errors.New("x"),
-			expectedClientReceived:     []User{{}},
-			expectedRepositoryReceived: nil,
-			expected:                   "notify of new user failed",
+			label:                  "on client error",
+			repositoryUsers:        []User{{Email: "x"}},
+			clientError:            map[User]error{{Email: "x"}: errors.New("")},
+			expectedClientReceived: []User{{Email: "x"}},
+			expectedRepositoryReceived: []User{
+				{Email: "x", Status: UserStatuses.Get("failed")},
+			},
+			expected: "",
 		},
 		{
 			label:                      "on repository update error",
@@ -184,9 +188,9 @@ func TestMailer_Subscribe(t *testing.T) {
 			onGetUsersNotSubscribedError: tc.repositoryGetError,
 			onUpdateUserError:            tc.repositoryUpdateError,
 		}
-		client := &testClient{shouldReturnError: tc.clientError}
+		client := &testClient{subscribeUserResults: tc.clientError}
 
-		mailer := &Mailer{repo: repo, client: client}
+		mailer := &Mailer{log: NOOPLog, repo: repo, client: client}
 
 		err := mailer.Subscribe()
 
@@ -281,6 +285,7 @@ func (msg *testMessage) GetText() string {
 }
 
 type pollTestRepository struct {
+	Repository
 	getUserByEmailResults map[string]userResult
 	insertResults         map[User]error
 	users                 []User
@@ -338,11 +343,11 @@ func (r *subscribeTestRepository) UpdateUser(user User) error {
 }
 
 type testClient struct {
-	received          []User
-	shouldReturnError error
+	received             []User
+	subscribeUserResults map[User]error
 }
 
 func (r *testClient) SubscribeUser(signUp User) error {
 	r.received = append(r.received, signUp)
-	return r.shouldReturnError
+	return r.subscribeUserResults[signUp]
 }

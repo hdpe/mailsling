@@ -93,7 +93,7 @@ func TestMailChimpClient_SubscribeUserErrors(t *testing.T) {
 		ops := &testClientOperations{onDo: tc.onDo}
 		config := MailChimpConfig{apiKey: tc.apiKey}
 
-		client := &mailChimpClient{ops: ops, config: config}
+		client := &mailChimpClient{log: NOOPLog, ops: ops, config: config}
 
 		err := client.SubscribeUser(User{Email: "a@b.com"})
 

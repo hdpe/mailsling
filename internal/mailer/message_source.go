@@ -2,7 +2,6 @@ package mailer
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
@@ -19,17 +18,18 @@ type Message interface {
 }
 
 type SQSMessageSource struct {
+	log       *Loggers
 	sqsClient sqsiface.SQSAPI
 	url       string
 	messages  []Message
 }
 
-func NewSQSMessageSource(queueUrl string) (*SQSMessageSource, error) {
+func NewSQSMessageSource(log *Loggers, queueUrl string) (*SQSMessageSource, error) {
 	sess, err := session.NewSession()
 	if err != nil {
 		return nil, fmt.Errorf("couldn't configure AWS client: %v", err)
 	}
-	ms := &SQSMessageSource{sqsClient: sqs.New(sess), url: queueUrl}
+	ms := &SQSMessageSource{log: log, sqsClient: sqs.New(sess), url: queueUrl}
 	return ms, nil
 }
 
@@ -41,7 +41,7 @@ func (ms *SQSMessageSource) GetNextMessage() (Message, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error receiving SQS message: %v", err)
 	}
-	log.Printf("Got %d messages", len(out.Messages))
+	ms.log.Info.Printf("Got %d messages", len(out.Messages))
 	for _, msg := range out.Messages {
 		ms.messages = append(ms.messages, &sqsMessage{delegate: msg})
 	}

@@ -1,7 +1,6 @@
 package mailer
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -14,6 +13,7 @@ type Repository interface {
 	GetUserByEmail(email string) (User, bool, error)
 	InsertUser(user User) error
 	UpdateUser(user User) error
+	Close() error
 }
 
 type DBRepository struct {
@@ -39,110 +39,78 @@ func (r userStatusSet) Get(name string) UserStatus {
 	panic(fmt.Sprintf("Unknown user status %q", name))
 }
 
-var UserStatuses = userStatusSet{"new", "subscribed"}
+var UserStatuses = userStatusSet{"new", "subscribed", "failed"}
 
-func (r *DBRepository) GetUsersNotSubscribed() ([]User, error) {
-	var result []User
-	err := r.doInTx(false, func(tx *sql.Tx) error {
-		rows, err := tx.Query("select id, email, status from users where status != ?",
-			UserStatuses.Get("subscribed"))
+func (r *DBRepository) GetUsersNotSubscribed() (result []User, err error) {
+	rows, err := r.Db.Query("select id, email, status from users where status = ?",
+		UserStatuses.Get("new"))
 
-		defer rows.Close()
+	if err != nil {
+		err = fmt.Errorf("couldn't get row: %v", err)
+		return
+	}
 
+	defer rows.Close()
+
+	for rows.Next() {
+		var user User
+		user, err = mapRow(rows)
 		if err != nil {
-			return fmt.Errorf("couldn't get row: %v", err)
+			err = fmt.Errorf("error retrieving row: %v", err)
+			return
 		}
-		for rows.Next() {
-			user, err := mapRow(rows)
-			if err != nil {
-				return fmt.Errorf("error retrieving row: %v", err)
-			}
-			result = append(result, user)
-		}
-		if err = rows.Err(); err != nil {
-			return fmt.Errorf("error iterating rows: %v", err)
-		}
-		return nil
-	})
+		result = append(result, user)
+	}
+	if err = rows.Err(); err != nil {
+		err = fmt.Errorf("error iterating rows: %v", err)
+	}
+
 	return result, err
 }
 
-func (r *DBRepository) GetUserByEmail(email string) (User, bool, error) {
-	var result User
-	var found bool
-	err := r.doInTx(false, func(tx *sql.Tx) error {
-		rows, err := tx.Query("select id, email, status from users where email = ?",
-			email)
+func (r *DBRepository) GetUserByEmail(email string) (result User, found bool, err error) {
+	rows, err := r.Db.Query("select id, email, status from users where email = ?", email)
 
-		defer rows.Close()
+	if err != nil {
+		err = fmt.Errorf("couldn't get row: %v", err)
+		return
+	}
 
+	defer rows.Close()
+
+	if rows.Next() {
+		found = true
+		result, err = mapRow(rows)
 		if err != nil {
-			return fmt.Errorf("couldn't get row: %v", err)
+			err = fmt.Errorf("error retrieving row: %v", err)
+			return
 		}
-		if rows.Next() {
-			found = true
-			result, err = mapRow(rows)
-			if err != nil {
-				return fmt.Errorf("error retrieving row: %v", err)
-			}
-		}
-		if err = rows.Err(); err != nil {
-			return fmt.Errorf("error iterating rows: %v", err)
-		}
-		return nil
-	})
+	}
+	if err = rows.Err(); err != nil {
+		err = fmt.Errorf("error iterating rows: %v", err)
+	}
+
 	return result, found, err
 }
 
 func (r *DBRepository) InsertUser(user User) error {
-	return r.doInTx(false, func(tx *sql.Tx) error {
-		_, err := tx.Exec("insert into users (email, status) values (?, ?)", user.Email,
-			UserStatuses.Get("new"))
-		if err != nil {
-			return fmt.Errorf("couldn't perform insert: %v", err)
-		} else {
-			return nil
-		}
-	})
+	_, err := r.Db.Exec("insert into users (email, status) values (?, ?)", user.Email, UserStatuses.Get("new"))
+	if err != nil {
+		err = fmt.Errorf("couldn't perform insert: %v", err)
+	}
+	return err
 }
 
 func (r *DBRepository) UpdateUser(user User) error {
-	return r.doInTx(false, func(tx *sql.Tx) error {
-		_, err := tx.Exec("UPDATE users SET email=?, status=? WHERE id=?", user.Email,
-			UserStatuses.Get("new"), user.ID)
-		if err != nil {
-			return fmt.Errorf("couldn't perform update: %v", err)
-		} else {
-			return nil
-		}
-	})
+	_, err := r.Db.Exec("UPDATE users SET email=?, status=? WHERE id=?", user.Email, user.Status, user.ID)
+	if err != nil {
+		err = fmt.Errorf("couldn't perform update: %v", err)
+	}
+	return err
 }
 
-func (r *DBRepository) doInTx(readOnly bool, action func(tx *sql.Tx) error) error {
-	tx, err := r.Db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: readOnly})
-
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	if err != nil {
-		return fmt.Errorf("couldn't start tx: %v", err)
-	}
-
-	err = action(tx)
-
-	if readOnly || err != nil {
-		tx.Rollback()
-	} else {
-		err = tx.Commit()
-		if err != nil {
-			err = fmt.Errorf("couldn't commit tx: %v", err)
-		}
-	}
-
-	return err
+func (r *DBRepository) Close() error {
+	return r.Db.Close()
 }
 
 func mapRow(rows *sql.Rows) (User, error) {

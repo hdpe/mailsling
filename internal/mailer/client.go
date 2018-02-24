@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -18,17 +17,8 @@ type postListMembersRequest struct {
 	Status string `json:"status"`
 }
 
-func NewClientConfig(apiKey string, listID string) *MailChimpConfig {
-	return &MailChimpConfig{apiKey: apiKey, listID: listID}
-}
-
 type clientOperations interface {
 	Do(req *http.Request) (*http.Response, error)
-}
-
-type mailChimpClient struct {
-	ops    clientOperations
-	config MailChimpConfig
 }
 
 type MailChimpConfig struct {
@@ -36,8 +26,14 @@ type MailChimpConfig struct {
 	listID string
 }
 
-func (config MailChimpConfig) NewClient() Client {
-	return &mailChimpClient{ops: &http.Client{}, config: config}
+func NewClientConfig(apiKey string, listID string) MailChimpConfig {
+	return MailChimpConfig{apiKey: apiKey, listID: listID}
+}
+
+type mailChimpClient struct {
+	log    *Loggers
+	ops    clientOperations
+	config MailChimpConfig
 }
 
 func (c *mailChimpClient) SubscribeUser(user User) error {
@@ -71,10 +67,14 @@ func (c *mailChimpClient) SubscribeUser(user User) error {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		b := &bytes.Buffer{}
 		b.ReadFrom(resp.Body)
-		log.Println(string(b.Bytes()))
+		c.log.Error.Println(string(b.Bytes()))
 
 		return fmt.Errorf("error received from server: HTTP status %d", resp.StatusCode)
 	}
 
 	return err
+}
+
+func NewClient(log *Loggers, config MailChimpConfig) Client {
+	return &mailChimpClient{log: log, ops: &http.Client{}, config: config}
 }

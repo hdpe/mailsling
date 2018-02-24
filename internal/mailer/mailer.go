@@ -3,7 +3,6 @@ package mailer
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 )
 
 type SignUpMessage struct {
@@ -12,6 +11,7 @@ type SignUpMessage struct {
 }
 
 type Mailer struct {
+	log    *Loggers
 	ms     MessageSource
 	repo   Repository
 	client Client
@@ -28,30 +28,30 @@ func (m *Mailer) Poll() error {
 
 		signUp, err := parseSignUp(msg.GetText())
 		if err != nil {
-			log.Printf("couldn't parse sign up from message %q: %v", msg.GetText(), err)
+			m.log.Error.Printf("couldn't parse sign up from message %q: %v", msg.GetText(), err)
 			continue
 		}
 
 		_, found, err := m.repo.GetUserByEmail(signUp.Email)
 
 		if err != nil {
-			log.Printf("couldn't get user by email from DB: %v", err)
+			m.log.Error.Printf("couldn't get user by email from DB: %v", err)
 			continue
 		}
 
 		if found {
-			log.Printf("user %q already known - skipping", signUp.Email)
+			m.log.Error.Printf("user %q already known - skipping", signUp.Email)
 		} else {
 			err = m.repo.InsertUser(User{Email: signUp.Email})
 			if err != nil {
-				log.Printf("couldn't insert sign up to DB: %v", err)
+				m.log.Error.Printf("couldn't insert sign up to DB: %v", err)
 				continue
 			}
 		}
 
 		err = m.ms.MessageProcessed(msg)
 		if err != nil {
-			log.Printf("couldn't mark message processed: %v", err)
+			m.log.Error.Printf("couldn't mark message processed: %v", err)
 		}
 	}
 
@@ -66,12 +66,18 @@ func (m *Mailer) Subscribe() error {
 	}
 
 	for _, u := range users {
+		var status UserStatus
+
 		err = m.client.SubscribeUser(u)
+
 		if err != nil {
-			return fmt.Errorf("notify of new user failed: %v", err)
+			m.log.Error.Printf("notify of new user failed: %v", err)
+			status = UserStatuses.Get("failed")
+		} else {
+			status = UserStatuses.Get("subscribed")
 		}
 
-		u.Status = UserStatuses.Get("subscribed")
+		u.Status = status
 
 		err = m.repo.UpdateUser(u)
 		if err != nil {
@@ -82,8 +88,8 @@ func (m *Mailer) Subscribe() error {
 	return nil
 }
 
-func NewMailer(ms MessageSource, repo Repository, client Client) *Mailer {
-	return &Mailer{ms, repo, client}
+func NewMailer(log *Loggers, ms MessageSource, repo Repository, client Client) *Mailer {
+	return &Mailer{log, ms, repo, client}
 }
 
 func parseSignUp(str string) (msg SignUpMessage, err error) {

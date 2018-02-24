@@ -10,7 +10,7 @@ import (
 
 func TestSqsMessageSource_GetNextMessageInvokesAWSApi(t *testing.T) {
 	client := &testSqsClient{}
-	ms := SQSMessageSource{url: "http://x", sqsClient: client}
+	ms := SQSMessageSource{log: NOOPLog, url: "http://x", sqsClient: client}
 
 	_, _ = ms.GetNextMessage()
 
@@ -25,7 +25,7 @@ func TestSqsMessageSource_GetNextMessageReturnsMessages(t *testing.T) {
 	client := &testSqsClient{messagesPerRequest: [][]sqs.Message{
 		{{Body: strptr("x")}},
 	}}
-	ms := SQSMessageSource{sqsClient: client}
+	ms := SQSMessageSource{log: NOOPLog, sqsClient: client}
 
 	next, err := ms.GetNextMessage()
 
@@ -51,7 +51,7 @@ func TestSqsMessageSource_GetNextMessageReturnsMessages(t *testing.T) {
 
 func TestSqsMessageSource_MessageProcessed(t *testing.T) {
 	client := &testSqsClient{}
-	ms := SQSMessageSource{url: "http://x", sqsClient: client}
+	ms := SQSMessageSource{log: NOOPLog, url: "http://x", sqsClient: client}
 
 	_ = ms.MessageProcessed(&sqsMessage{delegate: &sqs.Message{ReceiptHandle: strptr("y")}})
 
