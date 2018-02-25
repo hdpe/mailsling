@@ -32,17 +32,17 @@ func (m *Mailer) Poll() error {
 			continue
 		}
 
-		_, found, err := m.repo.GetUserByEmail(signUp.Email)
+		_, found, err := m.repo.GetRecipientByEmail(signUp.Email)
 
 		if err != nil {
-			m.log.Error.Printf("couldn't get user by email from DB: %v", err)
+			m.log.Error.Printf("couldn't get recipient by email from DB: %v", err)
 			continue
 		}
 
 		if found {
-			m.log.Error.Printf("user %q already known - skipping", signUp.Email)
+			m.log.Error.Printf("recipient %q already known - skipping", signUp.Email)
 		} else {
-			err = m.repo.InsertUser(User{Email: signUp.Email})
+			err = m.repo.InsertRecipient(Recipient{Email: signUp.Email})
 			if err != nil {
 				m.log.Error.Printf("couldn't insert sign up to DB: %v", err)
 				continue
@@ -59,29 +59,29 @@ func (m *Mailer) Poll() error {
 }
 
 func (m *Mailer) Subscribe() error {
-	users, err := m.repo.GetUsersNotSubscribed()
+	rs, err := m.repo.GetNewRecipients()
 
 	if err != nil {
-		return fmt.Errorf("couldn't get users to be subscribed: %v", err)
+		return fmt.Errorf("couldn't get recipients to be subscribed: %v", err)
 	}
 
-	for _, u := range users {
-		var status UserStatus
+	for _, r := range rs {
+		var status RecipientStatus
 
-		err = m.client.SubscribeUser(u)
+		err = m.client.Subscribe(r)
 
 		if err != nil {
-			m.log.Error.Printf("notify of new user failed: %v", err)
-			status = UserStatuses.Get("failed")
+			m.log.Error.Printf("notify of new recipient failed: %v", err)
+			status = RecipientStatuses.Get("failed")
 		} else {
-			status = UserStatuses.Get("subscribed")
+			status = RecipientStatuses.Get("subscribed")
 		}
 
-		u.Status = status
+		r.Status = status
 
-		err = m.repo.UpdateUser(u)
+		err = m.repo.UpdateRecipient(r)
 		if err != nil {
-			return fmt.Errorf("couldn't update user: %v", err)
+			return fmt.Errorf("couldn't update recipient: %v", err)
 		}
 	}
 

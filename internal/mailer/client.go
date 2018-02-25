@@ -9,7 +9,7 @@ import (
 )
 
 type Client interface {
-	SubscribeUser(user User) error
+	Subscribe(recipient Recipient) error
 }
 
 type postListMembersRequest struct {
@@ -36,7 +36,7 @@ type mailChimpClient struct {
 	config MailChimpConfig
 }
 
-func (c *mailChimpClient) SubscribeUser(user User) error {
+func (c *mailChimpClient) Subscribe(recipient Recipient) error {
 	// https://developer.mailchimp.com/documentation/mailchimp/guides/manage-subscribers-with-the-mailchimp-api/
 	keyParts := strings.Split(c.config.apiKey, "-")
 	if len(keyParts) < 2 {
@@ -46,7 +46,7 @@ func (c *mailChimpClient) SubscribeUser(user User) error {
 
 	url := fmt.Sprintf("https://%s.api.mailchimp.com/3.0/lists/%s/members", dc, c.config.listID)
 
-	payload := postListMembersRequest{Email: user.Email, Status: "subscribed"}
+	payload := postListMembersRequest{Email: recipient.Email, Status: "subscribed"}
 	b, err := json.Marshal(payload)
 	if err != nil {
 		panic(err)

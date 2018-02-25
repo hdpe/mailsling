@@ -3,16 +3,15 @@ package mailer
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
 type Repository interface {
-	GetUsersNotSubscribed() ([]User, error)
-	GetUserByEmail(email string) (User, bool, error)
-	InsertUser(user User) error
-	UpdateUser(user User) error
+	GetNewRecipients() ([]Recipient, error)
+	GetRecipientByEmail(string) (recipient Recipient, found bool, err error)
+	InsertRecipient(Recipient) error
+	UpdateRecipient(Recipient) error
 	Close() error
 }
 
@@ -20,30 +19,9 @@ type DBRepository struct {
 	Db *sql.DB
 }
 
-type User struct {
-	ID          int
-	Email       string
-	Status      UserStatus
-	WelcomeTime time.Time
-}
-
-type UserStatus string
-type userStatusSet []UserStatus
-
-func (r userStatusSet) Get(name string) UserStatus {
-	for _, us := range r {
-		if string(us) == name {
-			return us
-		}
-	}
-	panic(fmt.Sprintf("Unknown user status %q", name))
-}
-
-var UserStatuses = userStatusSet{"new", "subscribed", "failed"}
-
-func (r *DBRepository) GetUsersNotSubscribed() (result []User, err error) {
-	rows, err := r.Db.Query("select id, email, status from users where status = ?",
-		UserStatuses.Get("new"))
+func (r *DBRepository) GetNewRecipients() (result []Recipient, err error) {
+	rows, err := r.Db.Query("select id, email, status from recipients where status = ?",
+		RecipientStatuses.Get("new"))
 
 	if err != nil {
 		err = fmt.Errorf("couldn't get row: %v", err)
@@ -53,13 +31,13 @@ func (r *DBRepository) GetUsersNotSubscribed() (result []User, err error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var user User
-		user, err = mapRow(rows)
+		var rec Recipient
+		rec, err = mapRow(rows)
 		if err != nil {
 			err = fmt.Errorf("error retrieving row: %v", err)
 			return
 		}
-		result = append(result, user)
+		result = append(result, rec)
 	}
 	if err = rows.Err(); err != nil {
 		err = fmt.Errorf("error iterating rows: %v", err)
@@ -68,8 +46,8 @@ func (r *DBRepository) GetUsersNotSubscribed() (result []User, err error) {
 	return result, err
 }
 
-func (r *DBRepository) GetUserByEmail(email string) (result User, found bool, err error) {
-	rows, err := r.Db.Query("select id, email, status from users where email = ?", email)
+func (r *DBRepository) GetRecipientByEmail(email string) (result Recipient, found bool, err error) {
+	rows, err := r.Db.Query("select id, email, status from recipients where email = ?", email)
 
 	if err != nil {
 		err = fmt.Errorf("couldn't get row: %v", err)
@@ -93,16 +71,18 @@ func (r *DBRepository) GetUserByEmail(email string) (result User, found bool, er
 	return result, found, err
 }
 
-func (r *DBRepository) InsertUser(user User) error {
-	_, err := r.Db.Exec("insert into users (email, status) values (?, ?)", user.Email, UserStatuses.Get("new"))
+func (r *DBRepository) InsertRecipient(recipient Recipient) error {
+	_, err := r.Db.Exec("insert into recipients (email, status) values (?, ?)",
+		recipient.Email, RecipientStatuses.Get("new"))
 	if err != nil {
 		err = fmt.Errorf("couldn't perform insert: %v", err)
 	}
 	return err
 }
 
-func (r *DBRepository) UpdateUser(user User) error {
-	_, err := r.Db.Exec("UPDATE users SET email=?, status=? WHERE id=?", user.Email, user.Status, user.ID)
+func (r *DBRepository) UpdateRecipient(recipient Recipient) error {
+	_, err := r.Db.Exec("UPDATE recipients SET email=?, status=? WHERE id=?",
+		recipient.Email, recipient.Status, recipient.ID)
 	if err != nil {
 		err = fmt.Errorf("couldn't perform update: %v", err)
 	}
@@ -113,23 +93,23 @@ func (r *DBRepository) Close() error {
 	return r.Db.Close()
 }
 
-func mapRow(rows *sql.Rows) (User, error) {
+func mapRow(rows *sql.Rows) (Recipient, error) {
 	var (
 		id     int
 		email  string
 		status string
 		//welcomeTime time.Time
 
-		user User
+		r Recipient
 	)
 
 	err := rows.Scan(&id, &email, &status /*&welcomeTime*/)
 
 	if err == nil {
-		user = User{ID: id, Email: email, Status: UserStatuses.Get(status) /*WelcomeTime: welcomeTime*/}
+		r = Recipient{ID: id, Email: email, Status: RecipientStatuses.Get(status) /*WelcomeTime: welcomeTime*/}
 	}
 
-	return user, err
+	return r, err
 }
 
 func NewRepository(dsn string) (*DBRepository, error) {

@@ -10,13 +10,13 @@ import (
 	"testing"
 )
 
-func TestMailChimpClient_SubscribeUser(t *testing.T) {
+func TestMailChimpClient_Subscribe(t *testing.T) {
 	ops := &testClientOperations{}
 	config := MailChimpConfig{listID: "y", apiKey: "APIKEY-dc"}
 
 	client := &mailChimpClient{ops: ops, config: config}
 
-	client.SubscribeUser(User{Email: "a@b.com"})
+	client.Subscribe(Recipient{Email: "a@b.com"})
 
 	if num := len(ops.received); num != 1 {
 		t.Fatalf("Expected to receive 1 request, actually %d", num)
@@ -48,7 +48,7 @@ func TestMailChimpClient_SubscribeUser(t *testing.T) {
 	}
 }
 
-func TestMailChimpClient_SubscribeUserErrors(t *testing.T) {
+func TestMailChimpClient_SubscribeErrors(t *testing.T) {
 	testCases := []struct {
 		label    string
 		apiKey   string
@@ -95,7 +95,7 @@ func TestMailChimpClient_SubscribeUserErrors(t *testing.T) {
 
 		client := &mailChimpClient{log: NOOPLog, ops: ops, config: config}
 
-		err := client.SubscribeUser(User{Email: "a@b.com"})
+		err := client.Subscribe(Recipient{Email: "a@b.com"})
 
 		if err == nil || strings.Index(fmt.Sprintf("%s", err), tc.expected) != 0 {
 			t.Errorf("Expected error %s %q, actually %q", tc.label, tc.expected, err)

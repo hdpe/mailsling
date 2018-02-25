@@ -10,13 +10,13 @@ import (
 
 func TestMailer_Poll(t *testing.T) {
 	testCases := []struct {
-		label                           string
-		getNextMessageResults           []messageResult
-		expectedRepositoryInserted      []User
-		repositoryGetUserByEmailResults map[string]userResult
-		repositoryInsertResults         map[User]error
-		expectedMessageSourceProcessed  []Message
-		expected                        string
+		label                                string
+		getNextMessageResults                []messageResult
+		expectedRepositoryInserted           []Recipient
+		repositoryGetRecipientByEmailResults map[string]recipientResult
+		repositoryInsertResults              map[Recipient]error
+		expectedMessageSourceProcessed       []Message
+		expected                             string
 	}{
 		{
 			label: "on messages polled successfully",
@@ -25,7 +25,7 @@ func TestMailer_Poll(t *testing.T) {
 				{msg: &testMessage{Text: `{"type":"sign_up","email":"y"}`}},
 				{},
 			},
-			expectedRepositoryInserted: []User{
+			expectedRepositoryInserted: []Recipient{
 				{Email: "x"},
 				{Email: "y"},
 			},
@@ -52,17 +52,17 @@ func TestMailer_Poll(t *testing.T) {
 				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
 				{},
 			},
-			expectedRepositoryInserted:     []User{{Email: "x"}},
+			expectedRepositoryInserted:     []Recipient{{Email: "x"}},
 			expectedMessageSourceProcessed: []Message{&testMessage{Text: `{"type":"sign_up","email":"x"}`}},
 			expected:                       "",
 		},
 		{
-			label: "on repository get returns user",
+			label: "on repository get returns recipient",
 			getNextMessageResults: []messageResult{
 				{msg: &testMessage{Text: `{"type":"sign_up","email":"x"}`}},
 				{},
 			},
-			repositoryGetUserByEmailResults: map[string]userResult{
+			repositoryGetRecipientByEmailResults: map[string]recipientResult{
 				"x": {found: true},
 			},
 			expectedRepositoryInserted: nil,
@@ -78,10 +78,10 @@ func TestMailer_Poll(t *testing.T) {
 				{msg: &testMessage{Text: `{"type":"sign_up","email":"y"}`}},
 				{},
 			},
-			repositoryGetUserByEmailResults: map[string]userResult{
+			repositoryGetRecipientByEmailResults: map[string]recipientResult{
 				"x": {err: errors.New("")},
 			},
-			expectedRepositoryInserted: []User{
+			expectedRepositoryInserted: []Recipient{
 				{Email: "y"},
 			},
 			expectedMessageSourceProcessed: []Message{
@@ -96,10 +96,10 @@ func TestMailer_Poll(t *testing.T) {
 				{msg: &testMessage{Text: `{"type":"sign_up","email":"y"}`}},
 				{},
 			},
-			repositoryInsertResults: map[User]error{
-				User{Email: "x"}: errors.New(""),
+			repositoryInsertResults: map[Recipient]error{
+				Recipient{Email: "x"}: errors.New(""),
 			},
-			expectedRepositoryInserted: []User{
+			expectedRepositoryInserted: []Recipient{
 				{Email: "x"},
 				{Email: "y"},
 			},
@@ -111,16 +111,16 @@ func TestMailer_Poll(t *testing.T) {
 	for _, tc := range testCases {
 		ms := &testMessageSource{messageResults: tc.getNextMessageResults}
 		repo := &pollTestRepository{
-			getUserByEmailResults: tc.repositoryGetUserByEmailResults,
-			insertResults:         tc.repositoryInsertResults,
+			getRecipientByEmailResults: tc.repositoryGetRecipientByEmailResults,
+			insertResults:              tc.repositoryInsertResults,
 		}
 
 		mailer := &Mailer{log: NOOPLog, ms: ms, repo: repo}
 
 		err := mailer.Poll()
 
-		if !reflect.DeepEqual(tc.expectedRepositoryInserted, repo.users) {
-			t.Errorf("%s expected repo to insert %v, actually %v", tc.label, tc.expectedRepositoryInserted, repo.users)
+		if !reflect.DeepEqual(tc.expectedRepositoryInserted, repo.recipients) {
+			t.Errorf("%s expected repo to insert %v, actually %v", tc.label, tc.expectedRepositoryInserted, repo.recipients)
 		}
 		if !reflect.DeepEqual(tc.expectedMessageSourceProcessed, ms.processed) {
 			t.Errorf("%s expected message source to process %v, actually %v", tc.label, tc.expectedMessageSourceProcessed,
@@ -137,21 +137,21 @@ func TestMailer_Poll(t *testing.T) {
 func TestMailer_Subscribe(t *testing.T) {
 	testCases := []struct {
 		label                      string
-		repositoryUsers            []User
+		repositoryRecipients       []Recipient
 		repositoryGetError         error
-		clientError                map[User]error
+		clientError                map[Recipient]error
 		repositoryUpdateError      error
-		expectedClientReceived     []User
-		expectedRepositoryReceived []User
+		expectedClientReceived     []Recipient
+		expectedRepositoryReceived []Recipient
 		expected                   string
 	}{
 		{
-			label:                  "on repository users",
-			repositoryUsers:        []User{{Email: "x"}, {Email: "y"}},
-			expectedClientReceived: []User{{Email: "x"}, {Email: "y"}},
-			expectedRepositoryReceived: []User{
-				{Email: "x", Status: UserStatuses.Get("subscribed")},
-				{Email: "y", Status: UserStatuses.Get("subscribed")},
+			label:                  "on repository recipients",
+			repositoryRecipients:   []Recipient{{Email: "x"}, {Email: "y"}},
+			expectedClientReceived: []Recipient{{Email: "x"}, {Email: "y"}},
+			expectedRepositoryReceived: []Recipient{
+				{Email: "x", Status: RecipientStatuses.Get("subscribed")},
+				{Email: "y", Status: RecipientStatuses.Get("subscribed")},
 			},
 			expected: "",
 		},
@@ -160,35 +160,35 @@ func TestMailer_Subscribe(t *testing.T) {
 			repositoryGetError:         errors.New("x"),
 			expectedClientReceived:     nil,
 			expectedRepositoryReceived: nil,
-			expected:                   "couldn't get users to be subscribed",
+			expected:                   "couldn't get recipients to be subscribed",
 		},
 		{
 			label:                  "on client error",
-			repositoryUsers:        []User{{Email: "x"}},
-			clientError:            map[User]error{{Email: "x"}: errors.New("")},
-			expectedClientReceived: []User{{Email: "x"}},
-			expectedRepositoryReceived: []User{
-				{Email: "x", Status: UserStatuses.Get("failed")},
+			repositoryRecipients:   []Recipient{{Email: "x"}},
+			clientError:            map[Recipient]error{{Email: "x"}: errors.New("")},
+			expectedClientReceived: []Recipient{{Email: "x"}},
+			expectedRepositoryReceived: []Recipient{
+				{Email: "x", Status: RecipientStatuses.Get("failed")},
 			},
 			expected: "",
 		},
 		{
 			label:                      "on repository update error",
-			repositoryUsers:            []User{{}},
+			repositoryRecipients:       []Recipient{{}},
 			repositoryUpdateError:      errors.New("x"),
-			expectedClientReceived:     []User{{}},
-			expectedRepositoryReceived: []User{{Status: UserStatuses.Get("subscribed")}},
-			expected:                   "couldn't update user",
+			expectedClientReceived:     []Recipient{{}},
+			expectedRepositoryReceived: []Recipient{{Status: RecipientStatuses.Get("subscribed")}},
+			expected:                   "couldn't update recipient",
 		},
 	}
 
 	for _, tc := range testCases {
 		repo := &subscribeTestRepository{
-			onGetUsersNotSubscribedUsers: tc.repositoryUsers,
-			onGetUsersNotSubscribedError: tc.repositoryGetError,
-			onUpdateUserError:            tc.repositoryUpdateError,
+			onGetRecipientsNotSubscribedRecipients: tc.repositoryRecipients,
+			onGetRecipientsNotSubscribedError:      tc.repositoryGetError,
+			onUpdateRecipientError:                 tc.repositoryUpdateError,
 		}
-		client := &testClient{subscribeUserResults: tc.clientError}
+		client := &testClient{subscribeRecipientResults: tc.clientError}
 
 		mailer := &Mailer{log: NOOPLog, repo: repo, client: client}
 
@@ -203,9 +203,9 @@ func TestMailer_Subscribe(t *testing.T) {
 		if !reflect.DeepEqual(tc.expectedClientReceived, client.received) {
 			t.Errorf("%s expected client to receive %v, actually %v", tc.label, tc.expectedClientReceived, client.received)
 		}
-		if !reflect.DeepEqual(tc.expectedRepositoryReceived, repo.updateUserReceived) {
+		if !reflect.DeepEqual(tc.expectedRepositoryReceived, repo.updateRecipientReceived) {
 			t.Errorf("%s expected repository to receive %v, actually %v", tc.label, tc.expectedRepositoryReceived,
-				repo.updateUserReceived)
+				repo.updateRecipientReceived)
 		}
 	}
 }
@@ -253,10 +253,10 @@ type messageResult struct {
 	err error
 }
 
-type userResult struct {
-	user  User
-	found bool
-	err   error
+type recipientResult struct {
+	recipient Recipient
+	found     bool
+	err       error
 }
 
 type testMessageSource struct {
@@ -286,68 +286,68 @@ func (msg *testMessage) GetText() string {
 
 type pollTestRepository struct {
 	Repository
-	getUserByEmailResults map[string]userResult
-	insertResults         map[User]error
-	users                 []User
+	getRecipientByEmailResults map[string]recipientResult
+	insertResults              map[Recipient]error
+	recipients                 []Recipient
 }
 
-func (r *pollTestRepository) GetUsersNotSubscribed() ([]User, error) {
-	var result []User
-	for _, u := range r.users {
-		if u.Status == UserStatuses.Get("new") {
-			result = append(result, u)
+func (r *pollTestRepository) GetNewRecipients() ([]Recipient, error) {
+	var result []Recipient
+	for _, rec := range r.recipients {
+		if rec.Status == RecipientStatuses.Get("new") {
+			result = append(result, rec)
 		}
 	}
 	return result, nil
 }
 
-func (r *pollTestRepository) GetUserByEmail(email string) (User, bool, error) {
-	result := r.getUserByEmailResults[email]
-	return result.user, result.found, result.err
+func (r *pollTestRepository) GetRecipientByEmail(email string) (Recipient, bool, error) {
+	result := r.getRecipientByEmailResults[email]
+	return result.recipient, result.found, result.err
 }
 
-func (r *pollTestRepository) InsertUser(user User) error {
-	r.users = append(r.users, user)
-	return r.insertResults[user]
+func (r *pollTestRepository) InsertRecipient(recipient Recipient) error {
+	r.recipients = append(r.recipients, recipient)
+	return r.insertResults[recipient]
 }
 
-func (r *pollTestRepository) UpdateUser(user User) error {
-	for i, u := range r.users {
-		if u.ID == user.ID {
-			r.users[i] = user
+func (r *pollTestRepository) UpdateRecipient(recipient Recipient) error {
+	for i, rec := range r.recipients {
+		if rec.ID == recipient.ID {
+			r.recipients[i] = recipient
 			return nil
 		}
 	}
-	panic(fmt.Sprintf("no such user %d", user.ID))
+	panic(fmt.Sprintf("no such recipient %d", recipient.ID))
 }
 
 type subscribeTestRepository struct {
 	Repository
-	onGetUsersNotSubscribedUsers []User
-	onGetUsersNotSubscribedError error
-	updateUserReceived           []User
-	onUpdateUserError            error
+	onGetRecipientsNotSubscribedRecipients []Recipient
+	onGetRecipientsNotSubscribedError      error
+	updateRecipientReceived                []Recipient
+	onUpdateRecipientError                 error
 }
 
-func (r *subscribeTestRepository) GetUsersNotSubscribed() ([]User, error) {
-	if r.onGetUsersNotSubscribedError != nil {
-		return nil, r.onGetUsersNotSubscribedError
+func (r *subscribeTestRepository) GetNewRecipients() ([]Recipient, error) {
+	if r.onGetRecipientsNotSubscribedError != nil {
+		return nil, r.onGetRecipientsNotSubscribedError
 	} else {
-		return r.onGetUsersNotSubscribedUsers, nil
+		return r.onGetRecipientsNotSubscribedRecipients, nil
 	}
 }
 
-func (r *subscribeTestRepository) UpdateUser(user User) error {
-	r.updateUserReceived = append(r.updateUserReceived, user)
-	return r.onUpdateUserError
+func (r *subscribeTestRepository) UpdateRecipient(recipient Recipient) error {
+	r.updateRecipientReceived = append(r.updateRecipientReceived, recipient)
+	return r.onUpdateRecipientError
 }
 
 type testClient struct {
-	received             []User
-	subscribeUserResults map[User]error
+	received                  []Recipient
+	subscribeRecipientResults map[Recipient]error
 }
 
-func (r *testClient) SubscribeUser(signUp User) error {
-	r.received = append(r.received, signUp)
-	return r.subscribeUserResults[signUp]
+func (r *testClient) Subscribe(recipient Recipient) error {
+	r.received = append(r.received, recipient)
+	return r.subscribeRecipientResults[recipient]
 }
