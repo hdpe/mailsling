@@ -5,6 +5,11 @@ import (
 	"fmt"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/mattes/migrate"
+	"github.com/mattes/migrate/database/mysql"
+	"hdpe.me/remission-mailer/internal/mailer/schema"
+
+	"github.com/mattes/migrate/source/go-bindata"
 )
 
 type Repository interface {
@@ -117,6 +122,31 @@ func NewRepository(dsn string) (*DBRepository, error) {
 
 	if err != nil {
 		return nil, fmt.Errorf("couldn't open connection to %q: %v", dsn, err)
+	}
+
+	s := bindata.Resource(schema.AssetNames(),
+		func(name string) ([]byte, error) {
+			return schema.Asset(name)
+		})
+
+	sourceDrv, err := bindata.WithInstance(s)
+
+	if err != nil {
+		return nil, fmt.Errorf("couldn't read migrations: %v", err)
+	}
+
+	dbDrv, err := mysql.WithInstance(db, &mysql.Config{})
+
+	if err != nil {
+		return nil, fmt.Errorf("couldn't open connection for migrations: %v", err)
+	}
+
+	m, _ := migrate.NewWithInstance("go-bindata", sourceDrv, "mysql", dbDrv)
+
+	err = m.Up() // run your migrations and handle the errors above of course
+
+	if err != nil {
+		return nil, fmt.Errorf("couldn't update database: %v", err)
 	}
 
 	return &DBRepository{Db: db}, err
