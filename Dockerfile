@@ -15,4 +15,6 @@ RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 COPY --from=0 /go/bin/mailer .
 
-CMD ["./mailer"]
+RUN echo '* * * * * /root/mailer' >> /var/spool/cron/crontabs/root
+
+CMD ["crond", "-f"]
