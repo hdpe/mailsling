@@ -53,12 +53,15 @@ func TestSqsMessageSource_MessageProcessed(t *testing.T) {
 	client := &testSqsClient{}
 	ms := SQSMessageSource{log: NOOPLog, url: "http://x", sqsClient: client}
 
-	_ = ms.MessageProcessed(&sqsMessage{delegate: &sqs.Message{ReceiptHandle: strptr("y")}})
+	res := ms.MessageProcessed(&sqsMessage{delegate: &sqs.Message{ReceiptHandle: strptr("y")}})
 
 	expected := sqs.DeleteMessageInput{QueueUrl: strptr("http://x"), ReceiptHandle: strptr("y")}
 
+	if res != nil {
+		t.Errorf("Expected no error, actually %v", res)
+	}
 	if received := client.deleteMessageReceived; !reflect.DeepEqual(*received, expected) {
-		t.Fatalf("Expected to have requested delete %v, actually requested delete %v", expected, received)
+		t.Errorf("Expected to have requested delete %v, actually requested delete %v", expected, received)
 	}
 }
 

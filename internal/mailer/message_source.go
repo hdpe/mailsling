@@ -41,7 +41,10 @@ func (ms *SQSMessageSource) GetNextMessage() (Message, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error receiving SQS message: %v", err)
 	}
-	ms.log.Info.Printf("Got %d messages", len(out.Messages))
+	n := len(out.Messages)
+	if n > 0 {
+		ms.log.Info.Printf("Got %d messages", n)
+	}
 	for _, msg := range out.Messages {
 		ms.messages = append(ms.messages, &sqsMessage{delegate: msg})
 	}
@@ -51,7 +54,10 @@ func (ms *SQSMessageSource) GetNextMessage() (Message, error) {
 func (ms *SQSMessageSource) MessageProcessed(message Message) error {
 	handle := message.(*sqsMessage).delegate.ReceiptHandle
 	_, err := ms.sqsClient.DeleteMessage(&sqs.DeleteMessageInput{QueueUrl: &ms.url, ReceiptHandle: handle})
-	return fmt.Errorf("error deleting SQS message: %v", err)
+	if err != nil {
+		err = fmt.Errorf("error deleting SQS message: %v", err)
+	}
+	return err
 }
 
 func (ms *SQSMessageSource) dequeue() Message {
