@@ -124,6 +124,12 @@ func NewRepository(dsn string) (*DBRepository, error) {
 		return nil, fmt.Errorf("couldn't open connection to %q: %v", dsn, err)
 	}
 
+	err = applyMigrations(db)
+
+	return &DBRepository{Db: db}, err
+}
+
+func applyMigrations(db *sql.DB) error {
 	s := bindata.Resource(schema.AssetNames(),
 		func(name string) ([]byte, error) {
 			return schema.Asset(name)
@@ -132,22 +138,22 @@ func NewRepository(dsn string) (*DBRepository, error) {
 	sourceDrv, err := bindata.WithInstance(s)
 
 	if err != nil {
-		return nil, fmt.Errorf("couldn't read migrations: %v", err)
+		return fmt.Errorf("couldn't read migrations: %v", err)
 	}
 
 	dbDrv, err := mysql.WithInstance(db, &mysql.Config{})
 
 	if err != nil {
-		return nil, fmt.Errorf("couldn't open connection for migrations: %v", err)
+		return fmt.Errorf("couldn't open connection for migrations: %v", err)
 	}
 
 	m, _ := migrate.NewWithInstance("go-bindata", sourceDrv, "mysql", dbDrv)
 
-	err = m.Up() // run your migrations and handle the errors above of course
+	migrErr := m.Up()
 
-	if err != nil {
-		return nil, fmt.Errorf("couldn't update database: %v", err)
+	if migrErr != nil && migrErr != migrate.ErrNoChange {
+		err = fmt.Errorf("couldn't update database: %v", migrErr)
 	}
 
-	return &DBRepository{Db: db}, err
+	return err
 }
