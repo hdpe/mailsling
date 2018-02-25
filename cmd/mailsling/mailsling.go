@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"hdpe.me/remission-mailer/internal/mailer"
+	"github.com/hdpe/mailsling/internal/mailer"
 )
 
 func main() {

@@ -1,11 +1,11 @@
 # stage 1
 FROM golang:1.9.4
 
-COPY Makefile /go/src/hdpe.me/remission-mailer/
-COPY cmd/ /go/src/hdpe.me/remission-mailer/cmd/
-COPY internal/ /go/src/hdpe.me/remission-mailer/internal/
+COPY Makefile /go/src/github.com/hdpe/mailsling/
+COPY cmd/ /go/src/github.com/hdpe/mailsling/cmd/
+COPY internal/ /go/src/github.com/hdpe/mailsling/internal/
 
-WORKDIR /go/src/hdpe.me/remission-mailer/
+WORKDIR /go/src/github.com/hdpe/mailsling/
 RUN CGO_ENABLED=0 GOOS=linux make
 
 # stage 2
@@ -13,8 +13,8 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 
 WORKDIR /root/
-COPY --from=0 /go/bin/mailer .
+COPY --from=0 /go/bin/mailsling .
 
-RUN echo '* * * * * /root/mailer' >> /var/spool/cron/crontabs/root
+RUN echo '* * * * * /root/mailsling' >> /var/spool/cron/crontabs/root
 
 CMD ["crond", "-f"]

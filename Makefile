@@ -10,4 +10,4 @@ generate:
 	(cd ./internal/mailer/schema; go-bindata -pkg schema '.')
 
 install:
-	go install hdpe.me/remission-mailer/cmd/mailer
+	go install github.com/hdpe/mailsling/cmd/mailsling

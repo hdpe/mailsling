@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/hdpe/mailsling/internal/mailer/schema"
 	"github.com/mattes/migrate"
 	"github.com/mattes/migrate/database/mysql"
-	"hdpe.me/remission-mailer/internal/mailer/schema"
 
 	"github.com/mattes/migrate/source/go-bindata"
 )
