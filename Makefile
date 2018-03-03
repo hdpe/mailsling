@@ -1,4 +1,4 @@
-all: get-deps generate install
+all: get-deps generate install test
 
 get-deps:
 	go get -u github.com/aws/aws-sdk-go \
@@ -8,6 +8,9 @@ get-deps:
 
 generate:
 	(cd ./internal/mailer/schema; go-bindata -pkg schema '.')
+
+test:
+	go test ./...
 
 install:
 	go install github.com/hdpe/mailsling/cmd/mailsling
