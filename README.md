@@ -1,5 +1,7 @@
 # mailsling
 
+[![Build Status](https://travis-ci.org/hdpe/mailsling.svg?branch=master)](https://travis-ci.org/hdpe/mailsling)
+
 Baby's first golang program. Rigorously over-engineered; ruthlessly unidiomatic.
 
 This program processes email sign-ups, e.g. for newsletters, from a website or other thing. It:
@@ -25,7 +27,7 @@ This program expects messages of the following form:
 
 All config via environment variables.
 
-```
+```ini
 # AWS credentials/config:
 
 AWS_ACCESS_KEY_ID=BLAHBLAHBLAH
@@ -50,3 +52,6 @@ MAILER_MAILCHIMP_DEFAULT_LIST_ID=12345abcde
 
 ```
 
+## Docker
+
+The Docker image executes this program once a minute via crond.
