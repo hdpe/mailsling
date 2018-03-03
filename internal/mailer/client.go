@@ -9,7 +9,12 @@ import (
 )
 
 type Client interface {
-	Subscribe(recipient Recipient) error
+	Subscribe(recipient subscription) error
+}
+
+type subscription struct {
+	email  string
+	listID string
 }
 
 type postListMembersRequest struct {
@@ -23,11 +28,10 @@ type clientOperations interface {
 
 type MailChimpConfig struct {
 	apiKey string
-	listID string
 }
 
-func NewClientConfig(apiKey string, listID string) MailChimpConfig {
-	return MailChimpConfig{apiKey: apiKey, listID: listID}
+func NewClientConfig(apiKey string) MailChimpConfig {
+	return MailChimpConfig{apiKey: apiKey}
 }
 
 type mailChimpClient struct {
@@ -36,7 +40,7 @@ type mailChimpClient struct {
 	config MailChimpConfig
 }
 
-func (c *mailChimpClient) Subscribe(recipient Recipient) error {
+func (c *mailChimpClient) Subscribe(recipient subscription) error {
 	// https://developer.mailchimp.com/documentation/mailchimp/guides/manage-subscribers-with-the-mailchimp-api/
 	keyParts := strings.Split(c.config.apiKey, "-")
 	if len(keyParts) < 2 {
@@ -44,9 +48,9 @@ func (c *mailChimpClient) Subscribe(recipient Recipient) error {
 	}
 	dc := keyParts[1]
 
-	url := fmt.Sprintf("https://%s.api.mailchimp.com/3.0/lists/%s/members", dc, c.config.listID)
+	url := fmt.Sprintf("https://%s.api.mailchimp.com/3.0/lists/%s/members", dc, recipient.listID)
 
-	payload := postListMembersRequest{Email: recipient.Email, Status: "subscribed"}
+	payload := postListMembersRequest{Email: recipient.email, Status: "subscribed"}
 	b, err := json.Marshal(payload)
 	if err != nil {
 		panic(err)
@@ -69,7 +73,7 @@ func (c *mailChimpClient) Subscribe(recipient Recipient) error {
 		b.ReadFrom(resp.Body)
 		c.log.Error.Println(string(b.Bytes()))
 
-		return fmt.Errorf("error received from server: HTTP status %d", resp.StatusCode)
+		return fmt.Errorf("error received from %s: HTTP status %d", url, resp.StatusCode)
 	}
 
 	return err

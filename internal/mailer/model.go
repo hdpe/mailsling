@@ -25,3 +25,10 @@ func (r recipientStatusSet) Get(name string) RecipientStatus {
 }
 
 var RecipientStatuses = recipientStatusSet{"new", "subscribed", "failed"}
+
+type ListRecipient struct {
+	id          int
+	listID      string
+	recipientID int
+	status      RecipientStatus
+}

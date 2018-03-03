@@ -6,15 +6,22 @@ import (
 )
 
 type SignUpMessage struct {
-	Type  string `json:"type"`
-	Email string `json:"email"`
+	Type    string   `json:"type"`
+	Email   string   `json:"email"`
+	ListIDs []string `json:"listIds"`
+}
+
+type journal interface {
+	SignUp(email string, lists []string) error
 }
 
 type Mailer struct {
-	log    *Loggers
-	ms     MessageSource
-	repo   Repository
-	client Client
+	log           *Loggers
+	ms            MessageSource
+	defaultlistID string
+	journal       journal
+	repo          Repository
+	client        Client
 }
 
 func (m *Mailer) Poll() error {
@@ -32,21 +39,10 @@ func (m *Mailer) Poll() error {
 			continue
 		}
 
-		_, found, err := m.repo.GetRecipientByEmail(signUp.Email)
-
+		err = m.journal.SignUp(signUp.Email, m.getListIDs(signUp))
 		if err != nil {
-			m.log.Error.Printf("couldn't get recipient by email from DB: %v", err)
+			m.log.Error.Printf("%v", err)
 			continue
-		}
-
-		if found {
-			m.log.Error.Printf("recipient %q already known - skipping", signUp.Email)
-		} else {
-			err = m.repo.InsertRecipient(Recipient{Email: signUp.Email})
-			if err != nil {
-				m.log.Error.Printf("couldn't insert sign up to DB: %v", err)
-				continue
-			}
 		}
 
 		err = m.ms.MessageProcessed(msg)
@@ -68,7 +64,7 @@ func (m *Mailer) Subscribe() error {
 	for _, r := range rs {
 		var status RecipientStatus
 
-		err = m.client.Subscribe(r)
+		err = m.client.Subscribe(subscription{email: r.email, listID: r.listID})
 
 		if err != nil {
 			m.log.Error.Printf("notify of new recipient failed: %v", err)
@@ -77,9 +73,14 @@ func (m *Mailer) Subscribe() error {
 			status = RecipientStatuses.Get("subscribed")
 		}
 
-		r.Status = status
+		rec, err := m.repo.GetListRecipient(r.recipientID)
+		if err != nil {
+			return fmt.Errorf("couldn't get recipient: %v", err)
+		}
 
-		err = m.repo.UpdateRecipient(r)
+		rec.status = status
+
+		err = m.repo.UpdateListRecipient(rec)
 		if err != nil {
 			return fmt.Errorf("couldn't update recipient: %v", err)
 		}
@@ -88,8 +89,15 @@ func (m *Mailer) Subscribe() error {
 	return nil
 }
 
-func NewMailer(log *Loggers, ms MessageSource, repo Repository, client Client) *Mailer {
-	return &Mailer{log, ms, repo, client}
+func (m *Mailer) getListIDs(signUp SignUpMessage) []string {
+	if len(signUp.ListIDs) > 0 {
+		return signUp.ListIDs
+	}
+	return []string{m.defaultlistID}
+}
+
+func NewMailer(log *Loggers, ms MessageSource, listID string, repo Repository, client Client) *Mailer {
+	return &Mailer{log, ms, listID, &repositoryJournal{log: log, repo: repo}, repo, client}
 }
 
 func parseSignUp(str string) (msg SignUpMessage, err error) {

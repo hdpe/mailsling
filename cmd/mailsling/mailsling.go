@@ -37,12 +37,11 @@ func main() {
 
 	config := mailer.NewClientConfig(
 		os.Getenv("MAILER_MAILCHIMP_API_KEY"),
-		os.Getenv("MAILER_MAILCHIMP_LIST_ID"),
 	)
 
 	client := mailer.NewClient(log, config)
 
-	m := mailer.NewMailer(log, ms, repo, client)
+	m := mailer.NewMailer(log, ms, os.Getenv("MAILER_MAILCHIMP_DEFAULT_LIST_ID"), repo, client)
 
 	if poll {
 		err := m.Poll()

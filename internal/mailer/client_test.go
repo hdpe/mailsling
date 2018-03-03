@@ -12,11 +12,11 @@ import (
 
 func TestMailChimpClient_Subscribe(t *testing.T) {
 	ops := &testClientOperations{}
-	config := MailChimpConfig{listID: "y", apiKey: "APIKEY-dc"}
+	config := MailChimpConfig{apiKey: "APIKEY-dc"}
 
 	client := &mailChimpClient{ops: ops, config: config}
 
-	client.Subscribe(Recipient{Email: "a@b.com"})
+	client.Subscribe(subscription{email: "a@b.com", listID: "c"})
 
 	if num := len(ops.received); num != 1 {
 		t.Fatalf("Expected to receive 1 request, actually %d", num)
@@ -27,7 +27,7 @@ func TestMailChimpClient_Subscribe(t *testing.T) {
 	if expected, actual := "POST", req.Method; expected != actual {
 		t.Errorf("Expected method %v, actually %v", expected, actual)
 	}
-	if expected, actual := "https://dc.api.mailchimp.com/3.0/lists/y/members", req.URL.String(); expected != actual {
+	if expected, actual := "https://dc.api.mailchimp.com/3.0/lists/c/members", req.URL.String(); expected != actual {
 		t.Errorf("Expected URL %v, actually %v", expected, actual)
 	}
 	body, err := read(req.Body)
@@ -95,7 +95,7 @@ func TestMailChimpClient_SubscribeErrors(t *testing.T) {
 
 		client := &mailChimpClient{log: NOOPLog, ops: ops, config: config}
 
-		err := client.Subscribe(Recipient{Email: "a@b.com"})
+		err := client.Subscribe(subscription{email: "a@b.com"})
 
 		if err == nil || strings.Index(fmt.Sprintf("%s", err), tc.expected) != 0 {
 			t.Errorf("Expected error %s %q, actually %q", tc.label, tc.expected, err)
