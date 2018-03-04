@@ -37,11 +37,11 @@ type DBRepository struct {
 
 func (r *DBRepository) GetNewRecipients() (result []listRecipientComposite, err error) {
 	rows, err := r.Db.Query(`
-			select r.id, r.email, lr.list_id, lr.status 
-			from recipients r 
-			inner join list_recipients lr on r.id = lr.recipient_id
-			where status = ?`,
-		RecipientStatuses.Get("new"))
+		select r.id, r.email, lr.list_id, lr.status 
+		from recipients r 
+			inner join list_recipients lr
+				on r.id = lr.recipient_id
+		where status = ?`, RecipientStatuses.Get("new"))
 
 	if err != nil {
 		err = fmt.Errorf("couldn't get row: %v", err)
@@ -141,7 +141,12 @@ func (r *DBRepository) UpdateListRecipient(recipient ListRecipient) error {
 
 func (r *DBRepository) GetListRecipientByEmailAndListID(email string, listID string) (
 	result ListRecipient, found bool, err error) {
-	rows, err := r.Db.Query("select id, status from list_recipients where email = ? and list_id = ?", email, listID)
+	rows, err := r.Db.Query(`
+		select lr.id, lr.list_id, lr.recipient_id, lr.status
+		from list_recipients lr
+			inner join recipients r 
+				on lr.list_id = r._id
+		where r.email = ? and lr.list_id = ?`, email, listID)
 
 	if err != nil {
 		err = fmt.Errorf("couldn't get row: %v", err)
