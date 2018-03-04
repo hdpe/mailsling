@@ -85,7 +85,7 @@ func TestMailChimpClient_SubscribeErrors(t *testing.T) {
 			onDo: func() (*http.Response, error) {
 				return newClientTestResponse(400), nil
 			},
-			expected: "error received from server",
+			expected: "error received from",
 		},
 	}
 

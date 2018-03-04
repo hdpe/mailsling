@@ -400,14 +400,14 @@ func (r *subscribeTestRepository) GetNewRecipients() ([]listRecipientComposite, 
 	return res.recipients, res.err
 }
 
-func (r *subscribeTestRepository) GetRecipient(id int) (ListRecipient, error) {
+func (r *subscribeTestRepository) GetListRecipient(id int) (ListRecipient, error) {
 	if r.getRecipientResult == nil {
 		return ListRecipient{}, nil
 	}
 	return r.getRecipientResult(id)
 }
 
-func (r *subscribeTestRepository) UpdateRecipient(recipient ListRecipient) error {
+func (r *subscribeTestRepository) UpdateListRecipient(recipient ListRecipient) error {
 	r.updateRecipientReceived = append(r.updateRecipientReceived, recipient)
 	return r.updateRecipientResults[recipient]
 }
