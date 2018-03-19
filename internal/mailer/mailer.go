@@ -2,9 +2,8 @@ package mailer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-
-	"github.com/pkg/errors"
 )
 
 type setRecipientStateMessage struct {
