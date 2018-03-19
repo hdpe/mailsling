@@ -3,6 +3,7 @@ package mailer
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/hdpe/mailsling/internal/mailer/schema"
@@ -13,6 +14,7 @@ import (
 )
 
 type listRecipientComposite struct {
+	listRecipientID int
 	recipientID int
 	email       string
 	listID      string
@@ -20,7 +22,7 @@ type listRecipientComposite struct {
 }
 
 type Repository interface {
-	GetNewRecipients() ([]listRecipientComposite, error)
+	GetRecipientDataByStatus([]RecipientStatus) ([]listRecipientComposite, error)
 	GetRecipientByEmail(string) (recipient Recipient, found bool, err error)
 	InsertRecipient(Recipient) (int, error)
 	GetListRecipient(int) (ListRecipient, error)
@@ -35,13 +37,13 @@ type DBRepository struct {
 	Db *sql.DB
 }
 
-func (r *DBRepository) GetNewRecipients() (result []listRecipientComposite, err error) {
-	rows, err := r.Db.Query(`
-		select r.id, r.email, lr.list_id, lr.status 
+func (r *DBRepository) GetRecipientDataByStatus(statuses []RecipientStatus) (result []listRecipientComposite, err error) {
+	rows, err := r.Db.Query(fmt.Sprintf(`
+		select lr.id, r.id, r.email, lr.list_id, lr.status 
 		from recipients r 
 			inner join list_recipients lr
 				on r.id = lr.recipient_id
-		where status = ?`, RecipientStatuses.Get("new"))
+		where %v`, toStatusInFragment(statuses)))
 
 	if err != nil {
 		err = fmt.Errorf("couldn't get row: %v", err)
@@ -64,6 +66,15 @@ func (r *DBRepository) GetNewRecipients() (result []listRecipientComposite, err 
 	}
 
 	return result, err
+}
+
+func toStatusInFragment(statuses []RecipientStatus) string {
+	strs := make([]string, len(statuses))
+	for i, s := range statuses {
+		strs[i] = fmt.Sprintf("'%s'", s)
+	}
+
+	return fmt.Sprintf("status in (%s)", strings.Join(strs, ", "))
 }
 
 func (r *DBRepository) GetListRecipient(id int) (result ListRecipient, err error) {
@@ -145,7 +156,7 @@ func (r *DBRepository) GetListRecipientByEmailAndListID(email string, listID str
 		select lr.id, lr.list_id, lr.recipient_id, lr.status
 		from list_recipients lr
 			inner join recipients r 
-				on lr.list_id = r._id
+				on lr.recipient_id = r.id
 		where r.email = ? and lr.list_id = ?`, email, listID)
 
 	if err != nil {
@@ -244,6 +255,7 @@ func mapListRecipientRow(rows *sql.Rows) (ListRecipient, error) {
 
 func mapListRecipientCompositeRow(rows *sql.Rows) (listRecipientComposite, error) {
 	var (
+		listRecipientID int
 		recipientID int
 		email       string
 		listID      string
@@ -253,10 +265,17 @@ func mapListRecipientCompositeRow(rows *sql.Rows) (listRecipientComposite, error
 		r listRecipientComposite
 	)
 
-	err := rows.Scan(&recipientID, &email, &listID, &status /*&welcomeTime*/)
+	err := rows.Scan(&listRecipientID, &recipientID, &email, &listID, &status /*&welcomeTime*/)
 
 	if err == nil {
-		r = listRecipientComposite{recipientID: recipientID, email: email, listID: listID, status: RecipientStatuses.Get(status) /*WelcomeTime: welcomeTime*/}
+		r = listRecipientComposite{
+			listRecipientID: listRecipientID,
+			recipientID: recipientID,
+			email: email,
+			listID: listID,
+			status: RecipientStatuses.Get(status),
+			/*WelcomeTime: welcomeTime*/
+		}
 	}
 
 	return r, err

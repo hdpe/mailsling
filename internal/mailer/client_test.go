@@ -10,31 +10,31 @@ import (
 	"testing"
 )
 
-func TestMailChimpClient_Subscribe(t *testing.T) {
-	ops := &testClientOperations{}
+func TestMailChimpOperations_Execute(t *testing.T) {
+	clientOps := &testClientOperations{}
 	config := MailChimpConfig{apiKey: "APIKEY-dc"}
 
-	client := &mailChimpClient{ops: ops, config: config}
+	ops := &mailChimpOperations{ops: clientOps, config: config}
 
-	client.Subscribe(subscription{email: "a@b.com", listID: "c"})
+	ops.execute("POST", "/path", postListMemberRequest{Email: "a@b.com", Status: "c"})
 
-	if num := len(ops.received); num != 1 {
+	if num := len(clientOps.received); num != 1 {
 		t.Fatalf("Expected to receive 1 request, actually %d", num)
 	}
 
-	req := ops.received[0]
+	req := clientOps.received[0]
 
 	if expected, actual := "POST", req.Method; expected != actual {
 		t.Errorf("Expected method %v, actually %v", expected, actual)
 	}
-	if expected, actual := "https://dc.api.mailchimp.com/3.0/lists/c/members", req.URL.String(); expected != actual {
+	if expected, actual := "https://dc.api.mailchimp.com/3.0/path", req.URL.String(); expected != actual {
 		t.Errorf("Expected URL %v, actually %v", expected, actual)
 	}
 	body, err := read(req.Body)
 	if err != nil {
 		t.Errorf("Did not expect error %v", err)
 	}
-	if expected := `{"email_address":"a@b.com","status":"subscribed"}`; expected != body {
+	if expected := `{"email_address":"a@b.com","status":"c"}`; expected != body {
 		t.Errorf("Expected request body %v, actually %v", expected, body)
 	}
 	if expected, actual := []string{"application/json"}, req.Header["Content-Type"]; !reflect.DeepEqual(expected, actual) {
@@ -48,7 +48,7 @@ func TestMailChimpClient_Subscribe(t *testing.T) {
 	}
 }
 
-func TestMailChimpClient_SubscribeErrors(t *testing.T) {
+func TestMailChimpOperations_ExecuteErrors(t *testing.T) {
 	testCases := []struct {
 		label    string
 		apiKey   string
@@ -90,15 +90,221 @@ func TestMailChimpClient_SubscribeErrors(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		ops := &testClientOperations{onDo: tc.onDo}
+		clientOps := &testClientOperations{onDo: tc.onDo}
 		config := MailChimpConfig{apiKey: tc.apiKey}
 
-		client := &mailChimpClient{log: NOOPLog, ops: ops, config: config}
+		ops := &mailChimpOperations{log: NOOPLog, ops: clientOps, config: config}
 
-		err := client.Subscribe(subscription{email: "a@b.com"})
+		err := ops.execute("POST", "/path", subscription{email: "a@b.com"})
 
 		if err == nil || strings.Index(fmt.Sprintf("%s", err), tc.expected) != 0 {
 			t.Errorf("Expected error %s %q, actually %q", tc.label, tc.expected, err)
+		}
+	}
+}
+
+func TestMailChimpClient_SubscribeAndUnsubscribe(t *testing.T) {
+	testCases := []struct{
+		label string
+
+		testMethod func(c *mailChimpClient, s subscription) error
+		subscription subscription
+
+		executeInvoked bool
+		onExecute func(method string, url string, entity interface{}) error
+
+		expected error
+	}{
+		{
+			label: "subscribe invokes execute",
+
+			testMethod: func(c *mailChimpClient, s subscription) error {
+				return c.Subscribe(s)
+			},
+			subscription: subscription{email: "a@b.com", listID: "c"},
+
+			executeInvoked: true,
+			onExecute: func(method string, url string, entity interface{}) error {
+				if expected := "POST"; method != expected {
+					t.Errorf("subscribe invokes execute: ops Execute got %q, want %q", method, expected)
+				}
+				if expected := "/lists/c/members"; url != expected {
+					t.Errorf("subscribe invokes execute: ops Execute got %q, want %q", url, expected)
+				}
+				expectedEntity := postListMemberRequest{Email: "a@b.com", Status: "subscribed"}
+				if entity != expectedEntity {
+					t.Errorf("subscribe invokes execute: ops Execute got %q, want %q", entity, expectedEntity)
+				}
+				return nil
+			},
+
+			expected: nil,
+		},
+		{
+			label: "returns error on subscribe error",
+
+			testMethod: func(c *mailChimpClient, s subscription) error {
+				return c.Subscribe(s)
+			},
+			subscription: subscription{email: "a@b.com", listID: "c"},
+
+			executeInvoked: true,
+			onExecute: func(method string, url string, entity interface{}) error {
+				return errors.New("x")
+			},
+
+			expected: errors.New("x"),
+		},
+		{
+			label: "unsubscribe invokes execute",
+
+			testMethod: func(c *mailChimpClient, s subscription) error {
+				return c.Unsubscribe(s)
+			},
+			subscription: subscription{email: "a@b.com", listID: "c"},
+
+			executeInvoked: true,
+			onExecute: func(method string, url string, entity interface{}) error {
+				if expected := "PATCH"; method != expected {
+					t.Errorf("unsubscribe invokes execute: ops Execute got %q, want %q", method, expected)
+				}
+				// 357a20e8c56e69d6f9734d23ef9517e8 = md5 of a@b.com
+				if expected := "/lists/c/members/357a20e8c56e69d6f9734d23ef9517e8"; url != expected {
+					t.Errorf("unsubscribe invokes execute: ops Execute got %q, want %q", url, expected)
+				}
+				expectedEntity := patchListMemberStatusRequest{Status: "unsubscribed"}
+				if entity != expectedEntity {
+					t.Errorf("unsubscribe invokes execute: ops Execute got %q, want %q", entity, expectedEntity)
+				}
+				return nil
+			},
+
+			expected: nil,
+		},
+		{
+			label: "returns error on unsubscribe error",
+
+			testMethod: func(c *mailChimpClient, s subscription) error {
+				return c.Unsubscribe(s)
+			},
+			subscription: subscription{email: "a@b.com", listID: "c"},
+
+			executeInvoked: true,
+			onExecute: func(method string, url string, entity interface{}) error {
+				return errors.New("x")
+			},
+
+			expected: errors.New("x"),
+		},
+	}
+
+	for _, tc := range testCases {
+		ops := &testMailChimpOperations{onExecute: tc.onExecute}
+
+		client := &mailChimpClient{ops: ops}
+
+		err := tc.testMethod(client, tc.subscription)
+
+		if ops.executeInvoked != tc.executeInvoked {
+			t.Errorf("%v: execute invoked got %v, want %v", tc.label, ops.executeInvoked, tc.executeInvoked)
+		}
+		if !reflect.DeepEqual(err, tc.expected) {
+			t.Errorf("%v: result got %q, want %q", tc.label, err, tc.expected)
+		}
+	}
+}
+
+func TestClientNotifier_Notify(t *testing.T) {
+	testSubscription := subscription{email: "x", listID: "y"}
+
+	testCases := []struct {
+		label string
+
+		status RecipientStatus
+
+		subscribeInvoked bool
+		onSubscribe func(s subscription) error
+
+		unsubscribeInvoked bool
+		onUnsubscribe func(s subscription) error
+
+		expectedStatus RecipientStatus
+		expectedError error
+	}{
+		{
+			label: "on status = new",
+
+			status: RecipientStatuses.Get("new"),
+
+			subscribeInvoked: true,
+			onSubscribe: func(s subscription) error {
+				if s != testSubscription {
+					t.Errorf("on status = new: client Subscribe got %q, want %q", s, testSubscription)
+				}
+				return nil
+			},
+
+			expectedStatus: RecipientStatuses.Get("subscribed"),
+			expectedError: nil,
+		},
+		{
+			label: "returns error on subscribe error",
+
+			status: RecipientStatuses.Get("new"),
+
+			subscribeInvoked: true,
+			onSubscribe: func(s subscription) error {
+				return errors.New("x")
+			},
+
+			expectedStatus: RecipientStatuses.None,
+			expectedError: errors.New("x"),
+		},
+		{
+			label: "on status = unsubscribing",
+
+			status: RecipientStatuses.Get("unsubscribing"),
+
+			unsubscribeInvoked: true,
+			onUnsubscribe: func(s subscription) error {
+				if s != testSubscription {
+					t.Errorf("on status = unsubscribing: client Unsubscribe got %q, want %q", s, testSubscription)
+				}
+				return nil
+			},
+
+			expectedStatus: RecipientStatuses.Get("unsubscribed"),
+			expectedError: nil,
+		},
+		{
+			label: "returns error on unsubscribe error",
+
+			status: RecipientStatuses.Get("unsubscribing"),
+
+			unsubscribeInvoked: true,
+			onUnsubscribe: func(s subscription) error {
+				return errors.New("x")
+			},
+
+			expectedStatus: RecipientStatuses.None,
+			expectedError: errors.New("x"),
+		},
+	}
+
+	for _, tc := range testCases {
+		client := newNotifierTestClient(tc.onSubscribe, tc.onUnsubscribe)
+		n := &clientNotifier{client: client}
+
+		result, err := n.Notify(testSubscription, tc.status)
+
+		if client.subscribeInvoked != tc.subscribeInvoked {
+			t.Errorf("%v: subscribe invoked got %v, want %v", tc.label, client.subscribeInvoked, tc.subscribeInvoked)
+		}
+		if result != tc.expectedStatus {
+			t.Errorf("%v: result status got %v, want %v", tc.label, result, tc.expectedStatus)
+		}
+		if !reflect.DeepEqual(err, tc.expectedError) {
+			t.Errorf("%v: result error got %v, want %v", tc.label, err, tc.expectedError)
 		}
 	}
 }
@@ -133,4 +339,50 @@ type clientTestResponseBody struct {
 
 func (r *clientTestResponseBody) Close() error {
 	return nil
+}
+
+type notifierTestClient struct {
+	subscribeInvoked bool
+	onSubscribe func(s subscription) error
+
+	unsubscribeInvoked bool
+	onUnsubscribe func(s subscription) error
+}
+
+func (c *notifierTestClient) Subscribe(s subscription) error {
+	c.subscribeInvoked = true
+	return c.onSubscribe(s)
+}
+
+func (c *notifierTestClient) Unsubscribe(s subscription) error {
+	c.unsubscribeInvoked = true
+	return c.onUnsubscribe(s)
+}
+
+func newNotifierTestClient(onSubscribe func(s subscription) error, onUnsubscribe func(s subscription) error) *notifierTestClient {
+	c := &notifierTestClient{
+		onSubscribe: func(s subscription) error {
+			return nil
+		},
+		onUnsubscribe: func(s subscription) error {
+			return nil
+		},
+	}
+	if onSubscribe != nil {
+		c.onSubscribe = onSubscribe
+	}
+	if onUnsubscribe != nil {
+		c.onUnsubscribe = onUnsubscribe
+	}
+	return c
+}
+
+type testMailChimpOperations struct {
+	executeInvoked bool
+	onExecute func(method string, url string, entity interface{}) error
+}
+
+func (o *testMailChimpOperations) execute(method string, url string, entity interface{}) error {
+	o.executeInvoked = true
+	return o.onExecute(method, url, entity)
 }

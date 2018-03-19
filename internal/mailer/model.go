@@ -1,22 +1,20 @@
 package mailer
 
-import (
-	"fmt"
-	"time"
-)
+import "fmt"
 
 type Recipient struct {
-	ID          int
-	Email       string
-	Status      RecipientStatus
-	WelcomeTime time.Time
+	ID    int
+	Email string
 }
 
 type RecipientStatus string
-type recipientStatusSet []RecipientStatus
+type recipientStatusSet struct {
+	None     RecipientStatus
+	statuses []RecipientStatus
+}
 
 func (r recipientStatusSet) Get(name string) RecipientStatus {
-	for _, us := range r {
+	for _, us := range r.statuses {
 		if string(us) == name {
 			return us
 		}
@@ -24,7 +22,10 @@ func (r recipientStatusSet) Get(name string) RecipientStatus {
 	panic(fmt.Sprintf("Unknown status %q", name))
 }
 
-var RecipientStatuses = recipientStatusSet{"new", "subscribed", "failed"}
+var RecipientStatuses = recipientStatusSet{
+	statuses: []RecipientStatus{"new", "subscribed", "failed", "unsubscribing", "unsubscribed"},
+	None:     RecipientStatus(""),
+}
 
 type ListRecipient struct {
 	id          int

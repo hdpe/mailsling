@@ -4,12 +4,12 @@
 
 Baby's first golang program. Rigorously over-engineered; ruthlessly unidiomatic.
 
-This program processes email sign-ups, e.g. for newsletters, from a website or other thing. It:
+This program processes email sign-ups and unsubscribes, e.g. for newsletters, from a website or other thing. It:
 
-* Rips "sign up" messages out of an AWS SQS queue
+* Rips messages out of an AWS SQS queue
 * Parses recipient data from these
 * De-dups recipients into a MySQL database, maintaining their subscription state here
-* Subscribes the recipients to one or more MailChimp lists
+* Subscribes/unsubscribes the recipients to/from one or more MailChimp lists
 
 ## Messages
 
@@ -17,9 +17,18 @@ This program expects messages of the following form:
 
 ```
 {
-    "type": "sign_up",
+    "type": "subscribe",
     "email": "ron@perlman.face",
     "listIds": ["12345abcde"]
+}
+```
+
+or
+
+```
+{
+    "type": "unsubscribe",
+    "email": "ron@perlman.face"
 }
 ```
 

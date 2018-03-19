@@ -10,10 +10,10 @@ import (
 
 func main() {
 	var poll bool
-	var subscribe bool
+	var process bool
 
-	flag.BoolVar(&poll, "poll", true, "poll SQS for new subscriptions")
-	flag.BoolVar(&subscribe, "subscribe", true, "send subscription requests to MailChimp")
+	flag.BoolVar(&poll, "poll", true, "poll SQS for new messages")
+	flag.BoolVar(&process, "process", true, "notify clients of new recipient state")
 	flag.Parse()
 
 	log := &mailer.Loggers{
@@ -47,15 +47,15 @@ func main() {
 		err := m.Poll()
 
 		if err != nil {
-			log.Error.Printf("Error polling for subscribe requests: %v", err)
+			log.Error.Printf("Error polling for messages: %v", err)
 		}
 	}
 
-	if subscribe {
-		err := m.Subscribe()
+	if process {
+		err := m.Process()
 
 		if err != nil {
-			log.Error.Printf("Error subscribing users: %v ", err)
+			log.Error.Printf("Error processing recipient state: %v ", err)
 		}
 	}
 }
