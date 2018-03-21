@@ -17,7 +17,7 @@ func TestSqsMessageSource_GetNextMessageInvokesAWSApi(t *testing.T) {
 	expected := sqs.ReceiveMessageInput{QueueUrl: strptr("http://x")}
 
 	if received := client.receiveMessageReceived; !reflect.DeepEqual(*received, expected) {
-		t.Fatalf("Expected to have requested receive %v, actually requested receive %v", expected, received)
+		t.Fatalf("invoked ReceiveMessage got %v, want %v", *received, expected)
 	}
 }
 
@@ -30,22 +30,22 @@ func TestSqsMessageSource_GetNextMessageReturnsMessages(t *testing.T) {
 	next, err := ms.GetNextMessage()
 
 	if err != nil {
-		t.Fatalf("Error was returned")
+		t.Fatalf("error got %q, want nil", err)
 	}
 	if next == nil {
-		t.Fatalf("Message was nil")
+		t.Fatalf("message was nil")
 	}
-	if expected, txt := "x", next.GetText(); txt != expected {
-		t.Errorf("Expected Message body %s, was %s", expected, txt)
+	if txt, expected := next.GetText(), "x"; txt != expected {
+		t.Errorf("messag body got %q, want %q", txt, expected)
 	}
 
 	next, err = ms.GetNextMessage()
 
 	if err != nil {
-		t.Fatalf("Error was returned")
+		t.Fatalf("error got %q, want nil (2nd call)", err)
 	}
 	if next != nil {
-		t.Fatalf("Expected Message to be nil")
+		t.Fatalf("message was nil")
 	}
 }
 
@@ -58,10 +58,10 @@ func TestSqsMessageSource_MessageProcessed(t *testing.T) {
 	expected := sqs.DeleteMessageInput{QueueUrl: strptr("http://x"), ReceiptHandle: strptr("y")}
 
 	if res != nil {
-		t.Errorf("Expected no error, actually %v", res)
+		t.Errorf("error got %q, want nil", res)
 	}
 	if received := client.deleteMessageReceived; !reflect.DeepEqual(*received, expected) {
-		t.Errorf("Expected to have requested delete %v, actually requested delete %v", expected, received)
+		t.Errorf("invoked DeleteMessage got %v, want %v", *received, expected)
 	}
 }
 

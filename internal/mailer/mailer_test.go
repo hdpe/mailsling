@@ -4,40 +4,39 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 )
 
 func TestSetRecipientStateMessage_GetTargetStatus(t *testing.T) {
 	testCases := []struct {
-		label string
-		messageType string
+		label          string
+		messageType    string
 		expectedStatus RecipientStatus
-		expectedError error
+		expectedError  error
 	}{
 		{
-			label: "type = 'sign_up'", //legacy
-			messageType: "sign_up",
+			label:          "type = 'sign_up'", //legacy
+			messageType:    "sign_up",
 			expectedStatus: RecipientStatuses.Get("new"),
-			expectedError: nil,
+			expectedError:  nil,
 		},
 		{
-			label: "type = 'subscribe'",
-			messageType: "subscribe",
+			label:          "type = 'subscribe'",
+			messageType:    "subscribe",
 			expectedStatus: RecipientStatuses.Get("new"),
-			expectedError: nil,
+			expectedError:  nil,
 		},
 		{
-			label: "type = 'unsubscribe'",
-			messageType: "unsubscribe",
+			label:          "type = 'unsubscribe'",
+			messageType:    "unsubscribe",
 			expectedStatus: RecipientStatuses.Get("unsubscribing"),
-			expectedError: nil,
+			expectedError:  nil,
 		},
 		{
-			label: "unknown type",
-			messageType: "x",
+			label:          "unknown type",
+			messageType:    "x",
 			expectedStatus: RecipientStatuses.None,
-			expectedError: errors.New("unknown type: x"),
+			expectedError:  errors.New("unknown type: x"),
 		},
 	}
 
@@ -74,19 +73,19 @@ func TestMailer_Poll(t *testing.T) {
 			defaultListID: "a",
 
 			getNextMessageResults: []messageResult{
-				{msg: &testMessage{Text: `{"type":"unsubscribe","email":"x"}`}},
-				{msg: &testMessage{Text: `{"type":"unsubscribe","email":"y"}`}},
+				{msg: &testMessage{Text: `{"type":"unsubscribe","email":"x","attributes":{"k1":"v1"}}`}},
+				{msg: &testMessage{Text: `{"type":"unsubscribe","email":"y","attributes":{"k2":"v2"}}`}},
 				{},
 			},
 
 			expectedPendingState: []journalPendingState{
-				{email: "x", lists: []string{"a"}, status: RecipientStatuses.Get("unsubscribing")},
-				{email: "y", lists: []string{"a"}, status: RecipientStatuses.Get("unsubscribing")},
+				{email: "x", lists: []string{"a"}, status: RecipientStatuses.Get("unsubscribing"), attribs: map[string]string{"k1": "v1"}},
+				{email: "y", lists: []string{"a"}, status: RecipientStatuses.Get("unsubscribing"), attribs: map[string]string{"k2": "v2"}},
 			},
 
 			expectedMessageSourceProcessed: []Message{
-				&testMessage{Text: `{"type":"unsubscribe","email":"x"}`},
-				&testMessage{Text: `{"type":"unsubscribe","email":"y"}`},
+				&testMessage{Text: `{"type":"unsubscribe","email":"x","attributes":{"k1":"v1"}}`},
+				&testMessage{Text: `{"type":"unsubscribe","email":"y","attributes":{"k2":"v2"}}`},
 			},
 
 			expected: "",
@@ -197,15 +196,13 @@ func TestMailer_Poll(t *testing.T) {
 		err := mailer.Poll()
 
 		if !reflect.DeepEqual(tc.expectedPendingState, j.pendingStateReceived) {
-			t.Errorf("%s expected to add to journal %v, actually %v", tc.label, tc.expectedPendingState, j.pendingStateReceived)
+			t.Errorf("%v: invoked SetRecipientPendingState got %v, want %v", tc.label, j.pendingStateReceived, tc.expectedPendingState)
 		}
-		if expected, actual := sliceVals(tc.expectedMessageSourceProcessed), sliceVals(ms.processed); !reflect.DeepEqual(expected, actual) {
-			t.Errorf("%s expected message source to process %v, actually %v", tc.label, expected, actual)
+		if actual, expected := sliceVals(ms.processed), sliceVals(tc.expectedMessageSourceProcessed); !reflect.DeepEqual(actual, expected) {
+			t.Errorf("%v: invoked MessageProcessed got %v, got %v", tc.label, actual, expected)
 		}
-		if err != nil && tc.expected == "" {
-			t.Errorf("%s didn't expect error but got %v", tc.label, err)
-		} else if errorString := fmt.Sprintf("%v", err); strings.Index(errorString, tc.expected) != 0 {
-			t.Errorf("%s expected error %v, actually %v", tc.label, tc.expected, err)
+		if !errorMessageStartsWith(err, tc.expected) {
+			t.Errorf("%v: result error got %q, want prefix %q", tc.label, err, tc.expected)
 		}
 	}
 }
@@ -223,12 +220,12 @@ func TestMailer_Process(t *testing.T) {
 		label string
 
 		expectedNotifierReceived []notifyParams
-		onNotify func(s subscription, currentStatus RecipientStatus) (RecipientStatus, error)
+		onNotify                 func(s subscription, currentStatus RecipientStatus) (RecipientStatus, error)
 
 		onGetRecipientPendingState func() ([]listRecipientComposite, error)
 
 		expectedUpdateListRecipientReceived []updateListRecipientParams
-		onUpdateListRecipient func(listRecipientID int, status RecipientStatus) error
+		onUpdateListRecipient               func(listRecipientID int, status RecipientStatus) error
 
 		expected error
 	}{
@@ -250,7 +247,7 @@ func TestMailer_Process(t *testing.T) {
 				return RecipientStatuses.Get("subscribed"), nil
 			},
 
-			expectedUpdateListRecipientReceived: []updateListRecipientParams {
+			expectedUpdateListRecipientReceived: []updateListRecipientParams{
 				{listRecipientID: 1, status: RecipientStatuses.Get("subscribed")},
 				{listRecipientID: 2, status: RecipientStatuses.Get("subscribed")},
 			},
@@ -328,7 +325,7 @@ func TestMailer_Process(t *testing.T) {
 	for _, tc := range testCases {
 		j := &testJournal{
 			onGetRecipientPendingState: tc.onGetRecipientPendingState,
-			onUpdateListRecipient: tc.onUpdateListRecipient,
+			onUpdateListRecipient:      tc.onUpdateListRecipient,
 		}
 		notifier := &testClientNotifier{onNotify: tc.onNotify}
 
@@ -345,8 +342,8 @@ func TestMailer_Process(t *testing.T) {
 		if !reflect.DeepEqual(j.updateListRecipientReceived, tc.expectedUpdateListRecipientReceived) {
 			t.Errorf("%v: invoked UpdateListRecipient params got %v, want %v", tc.label, j.updateListRecipientReceived, tc.expectedUpdateListRecipientReceived)
 		}
-		if !reflect.DeepEqual(err, tc.expected) {
-			t.Errorf("%v: result got %v, want %v", tc.label, err, tc.expected)
+		if !errorEquals(err, tc.expected) {
+			t.Errorf("%v: result error got %q, want %q", tc.label, err, tc.expected)
 		}
 	}
 }
@@ -359,9 +356,18 @@ func TestParseMessage(t *testing.T) {
 		expectedError   string
 	}{
 		{
-			label:           "on valid json",
-			json:            `{"type":"subscribe","email":"x"}`,
-			expectedMessage: setRecipientStateMessage{Type: "subscribe", Email: "x"},
+			label: "on valid json",
+			json:  `{"type":"subscribe","email":"x","attributes":{"key":"value"}}`,
+			expectedMessage: setRecipientStateMessage{
+				Type:       "subscribe",
+				Email:      "x",
+				Attributes: map[string]string{"key": "value"},
+			},
+		},
+		{
+			label:         "on invalid json",
+			json:          "{",
+			expectedError: "invalid json: '{'",
 		},
 		{
 			label:         "on no email",
@@ -371,13 +377,13 @@ func TestParseMessage(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		signUp, err := parseMessage(tc.json)
+		msg, err := parseMessage(tc.json)
 
-		if !reflect.DeepEqual(tc.expectedMessage, signUp) {
-			t.Errorf("%s expected %v, actually %v", tc.label, tc.expectedMessage, signUp)
+		if !reflect.DeepEqual(msg, tc.expectedMessage) {
+			t.Errorf("%v: result got %v, want %v", tc.label, msg, tc.expectedMessage)
 		}
-		if errorString := fmt.Sprintf("%v", err); strings.Index(errorString, tc.expectedError) != 0 {
-			t.Errorf("%s expected error %v, actually %v", tc.label, tc.expectedError, err)
+		if !errorMessageStartsWith(err, tc.expectedError) {
+			t.Errorf("%v: result error got %q, want prefix %q", tc.label, err, tc.expectedError)
 		}
 	}
 }
@@ -421,9 +427,10 @@ func (msg *testMessage) GetText() string {
 }
 
 type journalPendingState struct {
-	email string
-	lists []string
-	status RecipientStatus
+	email   string
+	lists   []string
+	status  RecipientStatus
+	attribs map[string]string
 }
 
 type testJournal struct {
@@ -432,10 +439,10 @@ type testJournal struct {
 	pendingStateResults  func(email string, lists []string) error
 
 	getRecipientPendingStateInvoked bool
-	onGetRecipientPendingState func() ([]listRecipientComposite, error)
+	onGetRecipientPendingState      func() ([]listRecipientComposite, error)
 
 	updateListRecipientReceived []updateListRecipientParams
-	onUpdateListRecipient func(listRecipientID int, status RecipientStatus) error
+	onUpdateListRecipient       func(listRecipientID int, status RecipientStatus) error
 }
 
 func (j *testJournal) GetRecipientPendingState() ([]listRecipientComposite, error) {
@@ -446,13 +453,13 @@ func (j *testJournal) GetRecipientPendingState() ([]listRecipientComposite, erro
 func (j *testJournal) UpdateListRecipient(listRecipientID int, status RecipientStatus) error {
 	j.updateListRecipientReceived = append(j.updateListRecipientReceived, updateListRecipientParams{
 		listRecipientID: listRecipientID,
-		status: status,
+		status:          status,
 	})
 	return j.onUpdateListRecipient(listRecipientID, status)
 }
 
-func (j *testJournal) SetRecipientPendingState(email string, lists []string, status RecipientStatus) error {
-	state := journalPendingState{email: email, lists: lists, status: status}
+func (j *testJournal) SetRecipientPendingState(email string, lists []string, status RecipientStatus, attribs map[string]string) error {
+	state := journalPendingState{email: email, lists: lists, status: status, attribs: attribs}
 	j.pendingStateReceived = append(j.pendingStateReceived, state)
 	if j.pendingStateResults == nil {
 		return nil
@@ -460,13 +467,8 @@ func (j *testJournal) SetRecipientPendingState(email string, lists []string, sta
 	return j.pendingStateResults(email, lists)
 }
 
-type insertRecipientResult struct {
-	id  int
-	err error
-}
-
 type notifyParams struct {
-	subscription subscription
+	subscription  subscription
 	currentStatus RecipientStatus
 }
 
@@ -482,5 +484,5 @@ func (n *testClientNotifier) Notify(s subscription, currentStatus RecipientStatu
 
 type updateListRecipientParams struct {
 	listRecipientID int
-	status RecipientStatus
+	status          RecipientStatus
 }

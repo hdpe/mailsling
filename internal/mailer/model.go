@@ -32,4 +32,5 @@ type ListRecipient struct {
 	listID      string
 	recipientID int
 	status      RecipientStatus
+	attribs     map[string]string
 }

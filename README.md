@@ -19,7 +19,11 @@ This program expects messages of the following form:
 {
     "type": "subscribe",
     "email": "ron@perlman.face",
-    "listIds": ["12345abcde"]
+    "listIds": ["12345abcde"],
+    "attributes": {
+        "remote_addr": "127.0.0.1",
+        "or_any_other_attribute": "value"
+    }
 }
 ```
 

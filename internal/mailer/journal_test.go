@@ -2,9 +2,7 @@ package mailer
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -15,21 +13,22 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 		email   string
 		listIDs []string
 		status  RecipientStatus
+		attribs map[string]string
 
 		getRecipientByEmailResult map[string]recipientResult
 
 		expectedInsertRecipient Recipient
 		insertRecipientInvoked  bool
-		insertRecipientResult   insertRecipientResult
+		onInsertRecipient       func(Recipient) (int, error)
 
 		getListRecipientByEmailAndListIDInvoked bool
-		getListRecipientByEmailAndListIDResult  map[listRecipientByEmailAndListID]listRecipientResult
+		onGetListRecipientByEmailAndListID      func(email string, listID string) (listRecipient ListRecipient, found bool, err error)
 
 		expectedInsertListRecipients []ListRecipient
-		insertListRecipientResult    map[ListRecipient]insertListRecipientResult
+		onInsertListRecipient        func(ListRecipient) (int, error)
 
 		expectedUpdateListRecipients []ListRecipient
-		updateListRecipientResult    map[ListRecipient]error
+		onUpdateListRecipient        func(ListRecipient) error
 
 		expectedAsString string
 	}{
@@ -37,19 +36,22 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 			label:   "on new recipient",
 			email:   "x",
 			listIDs: []string{"a", "b"},
-			status:  RecipientStatuses.Get("failed"),
+			status:  RecipientStatuses.Get("new"),
+			attribs: map[string]string{"k": "v"},
 
 			getRecipientByEmailResult: map[string]recipientResult{},
 
 			expectedInsertRecipient: Recipient{Email: "x"},
 			insertRecipientInvoked:  true,
-			insertRecipientResult:   insertRecipientResult{id: 1},
+			onInsertRecipient: func(recipient Recipient) (int, error) {
+				return 1, nil
+			},
 
 			getListRecipientByEmailAndListIDInvoked: false,
 
 			expectedInsertListRecipients: []ListRecipient{
-				{recipientID: 1, listID: "a", status: RecipientStatuses.Get("failed")},
-				{recipientID: 1, listID: "b", status: RecipientStatuses.Get("failed")},
+				{recipientID: 1, listID: "a", status: RecipientStatuses.Get("new"), attribs: map[string]string{"k": "v"}},
+				{recipientID: 1, listID: "b", status: RecipientStatuses.Get("new"), attribs: map[string]string{"k": "v"}},
 			},
 
 			expectedAsString: "",
@@ -78,7 +80,7 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 			label:   "on existing list recipient",
 			email:   "x",
 			listIDs: []string{"a"},
-			status: RecipientStatuses.Get("unsubscribing"),
+			status:  RecipientStatuses.Get("unsubscribing"),
 
 			getRecipientByEmailResult: map[string]recipientResult{
 				"x": {found: true},
@@ -87,8 +89,8 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 			insertRecipientInvoked: false,
 
 			getListRecipientByEmailAndListIDInvoked: true,
-			getListRecipientByEmailAndListIDResult: map[listRecipientByEmailAndListID]listRecipientResult{
-				listRecipientByEmailAndListID{email: "x", listID: "a"}: {found: true, listRecipient: ListRecipient{id: 1}},
+			onGetListRecipientByEmailAndListID: func(email string, listID string) (listRecipient ListRecipient, found bool, err error) {
+				return ListRecipient{id: 1}, true, nil
 			},
 
 			expectedInsertListRecipients: nil,
@@ -121,7 +123,9 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 
 			expectedInsertRecipient: Recipient{Email: "x"},
 			insertRecipientInvoked:  true,
-			insertRecipientResult:   insertRecipientResult{err: errors.New("")},
+			onInsertRecipient: func(recipient Recipient) (int, error) {
+				return 0, errors.New("")
+			},
 
 			expectedAsString: "couldn't insert recipient",
 		},
@@ -135,8 +139,8 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 			},
 
 			getListRecipientByEmailAndListIDInvoked: true,
-			getListRecipientByEmailAndListIDResult: map[listRecipientByEmailAndListID]listRecipientResult{
-				listRecipientByEmailAndListID{email: "x", listID: "a"}: {err: errors.New("")},
+			onGetListRecipientByEmailAndListID: func(email string, listID string) (listRecipient ListRecipient, found bool, err error) {
+				return ListRecipient{}, false, errors.New("")
 			},
 
 			expectedAsString: "couldn't check for existing list recipient",
@@ -152,13 +156,15 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 			},
 
 			getListRecipientByEmailAndListIDInvoked: true,
-			getListRecipientByEmailAndListIDResult:  nil,
+			onGetListRecipientByEmailAndListID: func(email string, listID string) (listRecipient ListRecipient, found bool, err error) {
+				return ListRecipient{}, false, nil
+			},
 
 			expectedInsertListRecipients: []ListRecipient{
 				{listID: "a", status: RecipientStatuses.Get("failed")},
 			},
-			insertListRecipientResult: map[ListRecipient]insertListRecipientResult{
-				ListRecipient{listID: "a", status: RecipientStatuses.Get("failed")}: {err: errors.New("")},
+			onInsertListRecipient: func(recipient ListRecipient) (int, error) {
+				return 0, errors.New("")
 			},
 
 			expectedAsString: "couldn't insert list recipient",
@@ -168,19 +174,26 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 			email:   "x",
 			listIDs: []string{"a"},
 			status:  RecipientStatuses.Get("unsubscribing"),
+			attribs: map[string]string{"k": "v"},
 
 			getRecipientByEmailResult: map[string]recipientResult{
 				"x": {found: true},
 			},
 
 			getListRecipientByEmailAndListIDInvoked: true,
-			getListRecipientByEmailAndListIDResult: map[listRecipientByEmailAndListID]listRecipientResult{
-				listRecipientByEmailAndListID{email: "x", listID: "a"}: {found: true, listRecipient: ListRecipient{id: 1}},
+			onGetListRecipientByEmailAndListID: func(email string, listID string) (listRecipient ListRecipient, found bool, err error) {
+				return ListRecipient{id: 1}, true, nil
 			},
 
-			expectedUpdateListRecipients: []ListRecipient{{id: 1, status: RecipientStatuses.Get("unsubscribing")}},
-			updateListRecipientResult: map[ListRecipient]error{
-				ListRecipient{id: 1, status: RecipientStatuses.Get("unsubscribing")}: errors.New(""),
+			expectedUpdateListRecipients: []ListRecipient{
+				{
+					id:      1,
+					status:  RecipientStatuses.Get("unsubscribing"),
+					attribs: map[string]string{"k": "v"},
+				},
+			},
+			onUpdateListRecipient: func(recipient ListRecipient) error {
+				return errors.New("")
 			},
 
 			expectedAsString: "couldn't update list recipient",
@@ -188,41 +201,38 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		r := &journalTestRepository{
-			getRecipientByEmailResults:             tc.getRecipientByEmailResult,
-			getListRecipientByEmailAndListIDResult: tc.getListRecipientByEmailAndListIDResult,
-			insertRecipientResult:                  tc.insertRecipientResult,
-			insertListRecipientResult:              tc.insertListRecipientResult,
-			updateListRecipientResult:              tc.updateListRecipientResult,
-		}
+		r := newJournalTestRepository(journalTestRepositoryParams{
+			getRecipientByEmailResults:         tc.getRecipientByEmailResult,
+			onGetListRecipientByEmailAndListID: tc.onGetListRecipientByEmailAndListID,
+			onInsertRecipient:                  tc.onInsertRecipient,
+			onInsertListRecipient:              tc.onInsertListRecipient,
+			onUpdateListRecipient:              tc.onUpdateListRecipient,
+		})
 
 		j := &repositoryJournal{log: NOOPLog, repo: r}
 
-		res := j.SetRecipientPendingState(tc.email, tc.listIDs, tc.status)
+		res := j.SetRecipientPendingState(tc.email, tc.listIDs, tc.status, tc.attribs)
 
 		if r.insertRecipientInvoked != tc.insertRecipientInvoked {
-			t.Errorf("%s invoked insert recipient = %v, expected %v", tc.label,
-				r.insertRecipientInvoked, tc.insertRecipientInvoked)
+			t.Errorf("%v: invoked InsertRecipient got %v, want %v", tc.label, r.insertRecipientInvoked, tc.insertRecipientInvoked)
 		}
 		if r.insertRecipient != tc.expectedInsertRecipient {
-			t.Errorf("%s inserted recipient %v, expected %v", tc.label, r.insertRecipient, tc.expectedInsertRecipient)
+			t.Errorf("%v: invoked InsertRecipient params got %v, want %v", tc.label, r.insertRecipient, tc.expectedInsertRecipient)
 		}
 		if r.getListRecipientByEmailAndListIDInvoked != tc.getListRecipientByEmailAndListIDInvoked {
-			t.Errorf("%s invoked get list recipient by email and list ID = %v, expected %v", tc.label,
+			t.Errorf("%v: invoked GetListRecipientByEmailAndListID got %v, want %v", tc.label,
 				r.getListRecipientByEmailAndListIDInvoked, tc.getListRecipientByEmailAndListIDInvoked)
 		}
 		if !reflect.DeepEqual(r.insertListRecipients, tc.expectedInsertListRecipients) {
-			t.Errorf("%s inserted list recipients %v, expected %v", tc.label,
+			t.Errorf("%v: invoked InsertListRecipient got %v, want %v", tc.label,
 				r.insertListRecipients, tc.expectedInsertListRecipients)
 		}
 		if !reflect.DeepEqual(r.updateListRecipients, tc.expectedUpdateListRecipients) {
-			t.Errorf("%s updated list recipients %v, expected %v", tc.label,
+			t.Errorf("%v: invoked UpdateListRecipient got %v, want %v", tc.label,
 				r.updateListRecipients, tc.expectedUpdateListRecipients)
 		}
-		if tc.expectedAsString == "" && res != nil {
-			t.Errorf("%s got error %v, none expected", tc.label, res)
-		} else if resString := fmt.Sprintf("%v", res); strings.Index(resString, tc.expectedAsString) != 0 {
-			t.Errorf("%s got error %v, expected %q", tc.label, res, tc.expectedAsString)
+		if !errorMessageStartsWith(res, tc.expectedAsString) {
+			t.Errorf("%v: result error got %q, want %q", tc.label, res, tc.expectedAsString)
 		}
 	}
 }
@@ -276,10 +286,10 @@ func TestRepositoryJournal_GetRecipientPendingState(t *testing.T) {
 				r.getRecipientDataByStatusInvoked, true)
 		}
 		if !reflect.DeepEqual(res, tc.expectedResult) {
-			t.Errorf("%v: result got %v, want %v", tc.expectedResult, res)
+			t.Errorf("%v: result got %v, want %v", tc.label, tc.expectedResult, res)
 		}
-		if !reflect.DeepEqual(err, tc.expectedError) {
-			t.Errorf("%v: result got %v, want %v", tc.label, err, tc.expectedError)
+		if !errorEquals(err, tc.expectedError) {
+			t.Errorf("%v: result error got %v, want %v", tc.label, err, tc.expectedError)
 		}
 	}
 }
@@ -313,7 +323,7 @@ func TestRepositoryJournal_UpdateListRecipient(t *testing.T) {
 			updateListRecipientInvoked: true,
 			onUpdateListRecipient: func(lr ListRecipient) error {
 				expected := ListRecipient{recipientID: 2, status: RecipientStatuses.Get("subscribed")}
-				if lr != expected {
+				if !reflect.DeepEqual(lr, expected) {
 					t.Errorf("updated with status: UpdateListRecipient got %v, want %v", lr, expected)
 				}
 				return nil
@@ -363,40 +373,54 @@ func TestRepositoryJournal_UpdateListRecipient(t *testing.T) {
 		if r.updateListRecipientInvoked != tc.updateListRecipientInvoked {
 			t.Errorf("%v: UpdateListRecipient invoked got %v, want %v", tc.label, r.updateListRecipientInvoked, tc.updateListRecipientInvoked)
 		}
-		if !reflect.DeepEqual(err, tc.expected) {
-			t.Errorf("%v: got %q, want %q", tc.label, err, tc.expected)
+		if !errorEquals(err, tc.expected) {
+			t.Errorf("%v: result error got %q, want %q", tc.label, err, tc.expected)
 		}
 	}
 }
 
-type listRecipientResult struct {
-	listRecipient ListRecipient
-	found         bool
-	err           error
-}
+type journalTestRepositoryParams struct {
+	getRecipientByEmailResults map[string]recipientResult
 
-type listRecipientByEmailAndListID struct {
-	email  string
-	listID string
-}
+	getListRecipientByEmailAndListIDInvoked bool
+	onGetListRecipientByEmailAndListID      func(email string, listID string) (listRecipient ListRecipient, found bool, err error)
 
-type insertListRecipientResult struct {
-	id  int
-	err error
+	insertRecipient        Recipient
+	insertRecipientInvoked bool
+	onInsertRecipient      func(Recipient) (int, error)
+
+	insertListRecipients  []ListRecipient
+	onInsertListRecipient func(ListRecipient) (int, error)
+
+	updateListRecipients  []ListRecipient
+	onUpdateListRecipient func(ListRecipient) error
 }
 
 type journalTestRepository struct {
 	Repository
-	getRecipientByEmailResults              map[string]recipientResult
-	getListRecipientByEmailAndListIDResult  map[listRecipientByEmailAndListID]listRecipientResult
-	getListRecipientByEmailAndListIDInvoked bool
-	insertRecipient                         Recipient
-	insertRecipientInvoked                  bool
-	insertRecipientResult                   insertRecipientResult
-	insertListRecipients                    []ListRecipient
-	insertListRecipientResult               map[ListRecipient]insertListRecipientResult
-	updateListRecipients                    []ListRecipient
-	updateListRecipientResult               map[ListRecipient]error
+	journalTestRepositoryParams
+}
+
+func newJournalTestRepository(params journalTestRepositoryParams) *journalTestRepository {
+	r := &journalTestRepository{journalTestRepositoryParams: params}
+
+	if r.onGetListRecipientByEmailAndListID == nil {
+		r.onGetListRecipientByEmailAndListID = func(email string, listID string) (listRecipient ListRecipient, found bool, err error) {
+			return ListRecipient{}, false, nil
+		}
+	}
+	if r.onInsertListRecipient == nil {
+		r.onInsertListRecipient = func(recipient ListRecipient) (int, error) {
+			return 0, nil
+		}
+	}
+	if r.onUpdateListRecipient == nil {
+		r.onUpdateListRecipient = func(recipient ListRecipient) error {
+			return nil
+		}
+	}
+
+	return r
 }
 
 func (r *journalTestRepository) GetRecipientByEmail(email string) (recipient Recipient, found bool, err error) {
@@ -407,26 +431,23 @@ func (r *journalTestRepository) GetRecipientByEmail(email string) (recipient Rec
 func (r *journalTestRepository) InsertRecipient(rec Recipient) (int, error) {
 	r.insertRecipient = rec
 	r.insertRecipientInvoked = true
-	res := r.insertRecipientResult
-	return res.id, res.err
+	return r.onInsertRecipient(rec)
 }
 
 func (r *journalTestRepository) GetListRecipientByEmailAndListID(email string, listID string) (
 	listRecipient ListRecipient, found bool, err error) {
 	r.getListRecipientByEmailAndListIDInvoked = true
-	res := r.getListRecipientByEmailAndListIDResult[listRecipientByEmailAndListID{email: email, listID: listID}]
-	return res.listRecipient, res.found, res.err
+	return r.onGetListRecipientByEmailAndListID(email, listID)
 }
 
 func (r *journalTestRepository) InsertListRecipient(lr ListRecipient) (int, error) {
 	r.insertListRecipients = append(r.insertListRecipients, lr)
-	res := r.insertListRecipientResult[lr]
-	return res.id, res.err
+	return r.onInsertListRecipient(lr)
 }
 
 func (r *journalTestRepository) UpdateListRecipient(lr ListRecipient) error {
 	r.updateListRecipients = append(r.updateListRecipients, lr)
-	return r.updateListRecipientResult[lr]
+	return r.onUpdateListRecipient(lr)
 }
 
 func (r *journalTestRepository) DoInTx(action func() error) error {
@@ -459,4 +480,8 @@ func (r *simpleTestRepository) GetListRecipient(listRecipientID int) (ListRecipi
 func (r *simpleTestRepository) UpdateListRecipient(lr ListRecipient) error {
 	r.updateListRecipientInvoked = true
 	return r.onUpdateListRecipient(lr)
+}
+
+func (r *simpleTestRepository) DoInTx(action func() error) error {
+	return action()
 }

@@ -15,10 +15,10 @@ import (
 
 type listRecipientComposite struct {
 	listRecipientID int
-	recipientID int
-	email       string
-	listID      string
-	status      RecipientStatus
+	recipientID     int
+	email           string
+	listID          string
+	status          RecipientStatus
 }
 
 type Repository interface {
@@ -141,15 +141,6 @@ func (r *DBRepository) InsertRecipient(recipient Recipient) (int, error) {
 	return int(id), nil
 }
 
-func (r *DBRepository) UpdateListRecipient(recipient ListRecipient) error {
-	_, err := r.Db.Exec("update list_recipients set status=? where id=?",
-		recipient.status, recipient.id)
-	if err != nil {
-		err = fmt.Errorf("couldn't perform update: %v", err)
-	}
-	return err
-}
-
 func (r *DBRepository) GetListRecipientByEmailAndListID(email string, listID string) (
 	result ListRecipient, found bool, err error) {
 	rows, err := r.Db.Query(`
@@ -191,7 +182,33 @@ func (r *DBRepository) InsertListRecipient(listRecipient ListRecipient) (int, er
 	if err != nil {
 		return 0, fmt.Errorf("couldn't get inserted row ID: %v", err)
 	}
-	return int(id), nil
+	err = r.updateListRecipientAttributes(int(id), listRecipient.attribs)
+	return int(id), err
+}
+
+func (r *DBRepository) UpdateListRecipient(listRecipient ListRecipient) error {
+	_, err := r.Db.Exec("update list_recipients set status = ? where id = ?",
+		listRecipient.status, listRecipient.id)
+	if err != nil {
+		return fmt.Errorf("couldn't perform update: %v", err)
+	}
+	err = r.updateListRecipientAttributes(listRecipient.id, listRecipient.attribs)
+	return err
+}
+
+func (r *DBRepository) updateListRecipientAttributes(listRecipientID int, attribs map[string]string) error {
+	_, err := r.Db.Exec("delete from list_recipient_attributes where list_recipient_id = ?", listRecipientID)
+	if err != nil {
+		return fmt.Errorf("couldn't delete existing attributes: %v", err)
+	}
+	for k, v := range attribs {
+		_, err := r.Db.Exec("insert into list_recipient_attributes (list_recipient_id, `key`, `value`) values (?, ?, ?)",
+			listRecipientID, k, v)
+		if err != nil {
+			return fmt.Errorf("couldn't insert attribute: %v", err)
+		}
+	}
+	return nil
 }
 
 func (r *DBRepository) DoInTx(action func() error) error {
@@ -256,10 +273,10 @@ func mapListRecipientRow(rows *sql.Rows) (ListRecipient, error) {
 func mapListRecipientCompositeRow(rows *sql.Rows) (listRecipientComposite, error) {
 	var (
 		listRecipientID int
-		recipientID int
-		email       string
-		listID      string
-		status      string
+		recipientID     int
+		email           string
+		listID          string
+		status          string
 		//welcomeTime time.Time
 
 		r listRecipientComposite
@@ -270,10 +287,10 @@ func mapListRecipientCompositeRow(rows *sql.Rows) (listRecipientComposite, error
 	if err == nil {
 		r = listRecipientComposite{
 			listRecipientID: listRecipientID,
-			recipientID: recipientID,
-			email: email,
-			listID: listID,
-			status: RecipientStatuses.Get(status),
+			recipientID:     recipientID,
+			email:           email,
+			listID:          listID,
+			status:          RecipientStatuses.Get(status),
 			/*WelcomeTime: welcomeTime*/
 		}
 	}

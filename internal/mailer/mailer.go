@@ -7,9 +7,10 @@ import (
 )
 
 type setRecipientStateMessage struct {
-	Type    string   `json:"type"`
-	Email   string   `json:"email"`
-	ListIDs []string `json:"listIds"`
+	Type       string            `json:"type"`
+	Email      string            `json:"email"`
+	ListIDs    []string          `json:"listIds"`
+	Attributes map[string]string `json:"attributes"`
 }
 
 func (m setRecipientStateMessage) GetTargetStatus() (RecipientStatus, error) {
@@ -23,7 +24,7 @@ func (m setRecipientStateMessage) GetTargetStatus() (RecipientStatus, error) {
 }
 
 type journal interface {
-	SetRecipientPendingState(email string, lists []string, status RecipientStatus) error
+	SetRecipientPendingState(email string, lists []string, status RecipientStatus, attribs map[string]string) error
 	GetRecipientPendingState() ([]listRecipientComposite, error)
 	UpdateListRecipient(listRecipientID int, status RecipientStatus) error
 }
@@ -61,7 +62,7 @@ func (m *Mailer) Poll() error {
 			continue
 		}
 
-		err = m.journal.SetRecipientPendingState(parsed.Email, m.getListIDs(parsed), status)
+		err = m.journal.SetRecipientPendingState(parsed.Email, m.getListIDs(parsed), status, parsed.Attributes)
 		if err != nil {
 			m.log.Error.Printf("%v", err)
 			continue
@@ -118,6 +119,7 @@ func parseMessage(str string) (msg setRecipientStateMessage, err error) {
 	err = json.Unmarshal([]byte(str), &parsed)
 
 	if err != nil {
+		err = fmt.Errorf("invalid json: '%v': %v", str, err)
 		return
 	}
 
@@ -126,5 +128,5 @@ func parseMessage(str string) (msg setRecipientStateMessage, err error) {
 		return
 	}
 
-	return parsed, err
+	return parsed, nil
 }

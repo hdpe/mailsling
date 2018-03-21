@@ -7,7 +7,7 @@ type repositoryJournal struct {
 	repo Repository
 }
 
-func (j *repositoryJournal) SetRecipientPendingState(email string, lists []string, status RecipientStatus) error {
+func (j *repositoryJournal) SetRecipientPendingState(email string, lists []string, status RecipientStatus, attribs map[string]string) error {
 	return j.repo.DoInTx(func() error {
 		var recipientID int
 
@@ -36,6 +36,7 @@ func (j *repositoryJournal) SetRecipientPendingState(email string, lists []strin
 				return fmt.Errorf("couldn't check for existing list recipient: %v", err)
 			} else if lrFound {
 				lr.status = status
+				lr.attribs = attribs
 
 				err = j.repo.UpdateListRecipient(lr)
 
@@ -47,6 +48,7 @@ func (j *repositoryJournal) SetRecipientPendingState(email string, lists []strin
 					recipientID: recipientID,
 					listID:      listID,
 					status:      status,
+					attribs:     attribs,
 				})
 
 				if err != nil {
@@ -73,7 +75,9 @@ func (j *repositoryJournal) UpdateListRecipient(listRecipientID int, status Reci
 
 	lr.status = status
 
-	return j.repo.UpdateListRecipient(lr)
+	return j.repo.DoInTx(func() error {
+		return j.repo.UpdateListRecipient(lr)
+	})
 }
 
 func newJournal(repo Repository) *repositoryJournal {

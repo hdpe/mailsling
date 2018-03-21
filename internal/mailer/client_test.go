@@ -2,7 +2,6 @@ package mailer
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -19,32 +18,32 @@ func TestMailChimpOperations_Execute(t *testing.T) {
 	ops.execute("POST", "/path", postListMemberRequest{Email: "a@b.com", Status: "c"})
 
 	if num := len(clientOps.received); num != 1 {
-		t.Fatalf("Expected to receive 1 request, actually %d", num)
+		t.Fatalf("invoked Do %d times, want 1", num)
 	}
 
 	req := clientOps.received[0]
 
-	if expected, actual := "POST", req.Method; expected != actual {
-		t.Errorf("Expected method %v, actually %v", expected, actual)
+	if actual, expected := req.Method, "POST"; actual != expected {
+		t.Errorf("method got %q, want %q", actual, expected)
 	}
-	if expected, actual := "https://dc.api.mailchimp.com/3.0/path", req.URL.String(); expected != actual {
-		t.Errorf("Expected URL %v, actually %v", expected, actual)
+	if actual, expected := req.URL.String(), "https://dc.api.mailchimp.com/3.0/path"; actual != expected {
+		t.Errorf("URL got %v, want %v", actual, expected)
 	}
 	body, err := read(req.Body)
 	if err != nil {
-		t.Errorf("Did not expect error %v", err)
+		t.Errorf("read error got %q, want nil", err)
 	}
-	if expected := `{"email_address":"a@b.com","status":"c"}`; expected != body {
-		t.Errorf("Expected request body %v, actually %v", expected, body)
+	if expected := `{"email_address":"a@b.com","status":"c"}`; body != expected {
+		t.Errorf("request body got %v, want %v", body, expected)
 	}
-	if expected, actual := []string{"application/json"}, req.Header["Content-Type"]; !reflect.DeepEqual(expected, actual) {
-		t.Errorf("Expected Content-Type %v, actually %v", expected, actual)
+	if actual, expected := req.Header["Content-Type"], []string{"application/json"}; !reflect.DeepEqual(actual, expected) {
+		t.Errorf("Content-Type header got %q, actually %q", actual, expected)
 	}
 	_, password, ok := req.BasicAuth()
 	if !ok {
-		t.Errorf("Basic auth not ok")
-	} else if expected := "APIKEY-dc"; expected != password {
-		t.Errorf("Expected basic auth password %v, was %v", expected, password)
+		t.Errorf("basic auth not ok")
+	} else if expected := "APIKEY-dc"; password != expected {
+		t.Errorf("basic auth password got %q, want %q", password, expected)
 	}
 }
 
@@ -97,21 +96,21 @@ func TestMailChimpOperations_ExecuteErrors(t *testing.T) {
 
 		err := ops.execute("POST", "/path", subscription{email: "a@b.com"})
 
-		if err == nil || strings.Index(fmt.Sprintf("%s", err), tc.expected) != 0 {
-			t.Errorf("Expected error %s %q, actually %q", tc.label, tc.expected, err)
+		if !errorMessageStartsWith(err, tc.expected) {
+			t.Errorf("%v: result error got %q, want %q", tc.label, err, tc.expected)
 		}
 	}
 }
 
 func TestMailChimpClient_SubscribeAndUnsubscribe(t *testing.T) {
-	testCases := []struct{
+	testCases := []struct {
 		label string
 
-		testMethod func(c *mailChimpClient, s subscription) error
+		testMethod   func(c *mailChimpClient, s subscription) error
 		subscription subscription
 
 		executeInvoked bool
-		onExecute func(method string, url string, entity interface{}) error
+		onExecute      func(method string, url string, entity interface{}) error
 
 		expected error
 	}{
@@ -208,7 +207,7 @@ func TestMailChimpClient_SubscribeAndUnsubscribe(t *testing.T) {
 		if ops.executeInvoked != tc.executeInvoked {
 			t.Errorf("%v: execute invoked got %v, want %v", tc.label, ops.executeInvoked, tc.executeInvoked)
 		}
-		if !reflect.DeepEqual(err, tc.expected) {
+		if !errorEquals(err, tc.expected) {
 			t.Errorf("%v: result got %q, want %q", tc.label, err, tc.expected)
 		}
 	}
@@ -223,13 +222,13 @@ func TestClientNotifier_Notify(t *testing.T) {
 		status RecipientStatus
 
 		subscribeInvoked bool
-		onSubscribe func(s subscription) error
+		onSubscribe      func(s subscription) error
 
 		unsubscribeInvoked bool
-		onUnsubscribe func(s subscription) error
+		onUnsubscribe      func(s subscription) error
 
 		expectedStatus RecipientStatus
-		expectedError error
+		expectedError  error
 	}{
 		{
 			label: "on status = new",
@@ -245,7 +244,7 @@ func TestClientNotifier_Notify(t *testing.T) {
 			},
 
 			expectedStatus: RecipientStatuses.Get("subscribed"),
-			expectedError: nil,
+			expectedError:  nil,
 		},
 		{
 			label: "returns error on subscribe error",
@@ -258,7 +257,7 @@ func TestClientNotifier_Notify(t *testing.T) {
 			},
 
 			expectedStatus: RecipientStatuses.None,
-			expectedError: errors.New("x"),
+			expectedError:  errors.New("x"),
 		},
 		{
 			label: "on status = unsubscribing",
@@ -274,7 +273,7 @@ func TestClientNotifier_Notify(t *testing.T) {
 			},
 
 			expectedStatus: RecipientStatuses.Get("unsubscribed"),
-			expectedError: nil,
+			expectedError:  nil,
 		},
 		{
 			label: "returns error on unsubscribe error",
@@ -287,7 +286,7 @@ func TestClientNotifier_Notify(t *testing.T) {
 			},
 
 			expectedStatus: RecipientStatuses.None,
-			expectedError: errors.New("x"),
+			expectedError:  errors.New("x"),
 		},
 	}
 
@@ -343,10 +342,10 @@ func (r *clientTestResponseBody) Close() error {
 
 type notifierTestClient struct {
 	subscribeInvoked bool
-	onSubscribe func(s subscription) error
+	onSubscribe      func(s subscription) error
 
 	unsubscribeInvoked bool
-	onUnsubscribe func(s subscription) error
+	onUnsubscribe      func(s subscription) error
 }
 
 func (c *notifierTestClient) Subscribe(s subscription) error {
@@ -379,7 +378,7 @@ func newNotifierTestClient(onSubscribe func(s subscription) error, onUnsubscribe
 
 type testMailChimpOperations struct {
 	executeInvoked bool
-	onExecute func(method string, url string, entity interface{}) error
+	onExecute      func(method string, url string, entity interface{}) error
 }
 
 func (o *testMailChimpOperations) execute(method string, url string, entity interface{}) error {
