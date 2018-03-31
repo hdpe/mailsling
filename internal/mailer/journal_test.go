@@ -1,6 +1,7 @@
 package mailer
 
 import (
+	"database/sql"
 	"errors"
 	"reflect"
 	"testing"
@@ -423,35 +424,35 @@ func newJournalTestRepository(params journalTestRepositoryParams) *journalTestRe
 	return r
 }
 
-func (r *journalTestRepository) GetRecipientByEmail(email string) (recipient Recipient, found bool, err error) {
+func (r *journalTestRepository) GetRecipientByEmail(tx *sql.Tx, email string) (recipient Recipient, found bool, err error) {
 	res := r.getRecipientByEmailResults[email]
 	return res.recipient, res.found, res.err
 }
 
-func (r *journalTestRepository) InsertRecipient(rec Recipient) (int, error) {
+func (r *journalTestRepository) InsertRecipient(tx *sql.Tx, rec Recipient) (int, error) {
 	r.insertRecipient = rec
 	r.insertRecipientInvoked = true
 	return r.onInsertRecipient(rec)
 }
 
-func (r *journalTestRepository) GetListRecipientByEmailAndListID(email string, listID string) (
+func (r *journalTestRepository) GetListRecipientByEmailAndListID(tx *sql.Tx, email string, listID string) (
 	listRecipient ListRecipient, found bool, err error) {
 	r.getListRecipientByEmailAndListIDInvoked = true
 	return r.onGetListRecipientByEmailAndListID(email, listID)
 }
 
-func (r *journalTestRepository) InsertListRecipient(lr ListRecipient) (int, error) {
+func (r *journalTestRepository) InsertListRecipient(tx *sql.Tx, lr ListRecipient) (int, error) {
 	r.insertListRecipients = append(r.insertListRecipients, lr)
 	return r.onInsertListRecipient(lr)
 }
 
-func (r *journalTestRepository) UpdateListRecipient(lr ListRecipient) error {
+func (r *journalTestRepository) UpdateListRecipient(tx *sql.Tx, lr ListRecipient) error {
 	r.updateListRecipients = append(r.updateListRecipients, lr)
 	return r.onUpdateListRecipient(lr)
 }
 
-func (r *journalTestRepository) DoInTx(action func() error) error {
-	return action()
+func (r *journalTestRepository) DoInTx(action func(*sql.Tx) error) error {
+	return action(nil)
 }
 
 type simpleTestRepository struct {
@@ -467,21 +468,21 @@ type simpleTestRepository struct {
 	onUpdateListRecipient      func(listRecipient ListRecipient) error
 }
 
-func (r *simpleTestRepository) GetRecipientDataByStatus(statuses []RecipientStatus) ([]listRecipientComposite, error) {
+func (r *simpleTestRepository) GetRecipientDataByStatus(tx *sql.Tx, statuses []RecipientStatus) ([]listRecipientComposite, error) {
 	r.getRecipientDataByStatusInvoked = true
 	return r.onGetRecipientDataByStatus(statuses)
 }
 
-func (r *simpleTestRepository) GetListRecipient(listRecipientID int) (ListRecipient, error) {
+func (r *simpleTestRepository) GetListRecipient(tx *sql.Tx, listRecipientID int) (ListRecipient, error) {
 	r.getListRecipientInvoked = true
 	return r.onGetListRecipient(listRecipientID)
 }
 
-func (r *simpleTestRepository) UpdateListRecipient(lr ListRecipient) error {
+func (r *simpleTestRepository) UpdateListRecipient(tx *sql.Tx, lr ListRecipient) error {
 	r.updateListRecipientInvoked = true
 	return r.onUpdateListRecipient(lr)
 }
 
-func (r *simpleTestRepository) DoInTx(action func() error) error {
-	return action()
+func (r *simpleTestRepository) DoInTx(action func(*sql.Tx) error) error {
+	return action(nil)
 }

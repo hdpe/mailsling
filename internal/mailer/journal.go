@@ -1,6 +1,9 @@
 package mailer
 
-import "fmt"
+import (
+	"database/sql"
+	"fmt"
+)
 
 type repositoryJournal struct {
 	log  *Loggers
@@ -8,17 +11,17 @@ type repositoryJournal struct {
 }
 
 func (j *repositoryJournal) SetRecipientPendingState(email string, lists []string, status RecipientStatus, attribs map[string]string) error {
-	return j.repo.DoInTx(func() error {
+	return j.repo.DoInTx(func(tx *sql.Tx) error {
 		var recipientID int
 
-		rec, found, err := j.repo.GetRecipientByEmail(email)
+		rec, found, err := j.repo.GetRecipientByEmail(tx, email)
 
 		if err != nil {
 			return fmt.Errorf("couldn't check for existing recipient: %v", err)
 		} else if found {
 			recipientID = rec.ID
 		} else {
-			recipientID, err = j.repo.InsertRecipient(Recipient{Email: email})
+			recipientID, err = j.repo.InsertRecipient(tx, Recipient{Email: email})
 
 			if err != nil {
 				return fmt.Errorf("couldn't insert recipient: %v", err)
@@ -29,7 +32,7 @@ func (j *repositoryJournal) SetRecipientPendingState(email string, lists []strin
 			var lr ListRecipient
 			var lrFound bool
 			if found {
-				lr, lrFound, err = j.repo.GetListRecipientByEmailAndListID(email, listID)
+				lr, lrFound, err = j.repo.GetListRecipientByEmailAndListID(tx, email, listID)
 			}
 
 			if err != nil {
@@ -38,13 +41,13 @@ func (j *repositoryJournal) SetRecipientPendingState(email string, lists []strin
 				lr.status = status
 				lr.attribs = attribs
 
-				err = j.repo.UpdateListRecipient(lr)
+				err = j.repo.UpdateListRecipient(tx, lr)
 
 				if err != nil {
 					return fmt.Errorf("couldn't update list recipient: %v", err)
 				}
 			} else {
-				_, err = j.repo.InsertListRecipient(ListRecipient{
+				_, err = j.repo.InsertListRecipient(tx, ListRecipient{
 					recipientID: recipientID,
 					listID:      listID,
 					status:      status,
@@ -61,23 +64,33 @@ func (j *repositoryJournal) SetRecipientPendingState(email string, lists []strin
 }
 
 func (j *repositoryJournal) GetRecipientPendingState() ([]listRecipientComposite, error) {
-	return j.repo.GetRecipientDataByStatus([]RecipientStatus{
-		RecipientStatuses.Get("new"),
-		RecipientStatuses.Get("unsubscribing")})
+	var result []listRecipientComposite
+	var err error
+
+	err = j.repo.DoInTx(func(tx *sql.Tx) error {
+		var innerErr error
+		result, innerErr = j.repo.GetRecipientDataByStatus(tx, []RecipientStatus{
+			RecipientStatuses.Get("new"),
+			RecipientStatuses.Get("unsubscribing")})
+
+		return innerErr
+	});
+
+	return result, err;
 }
 
 func (j *repositoryJournal) UpdateListRecipient(listRecipientID int, status RecipientStatus) error {
-	lr, err := j.repo.GetListRecipient(listRecipientID)
+	return j.repo.DoInTx(func(tx *sql.Tx) error {
+		lr, err := j.repo.GetListRecipient(tx, listRecipientID)
 
-	if err != nil {
-		return fmt.Errorf("couldn't get existing list recipient: %v", err)
-	}
+		if err != nil {
+			return fmt.Errorf("couldn't get existing list recipient: %v", err)
+		}
 
-	lr.status = status
+		lr.status = status
 
-	return j.repo.DoInTx(func() error {
-		return j.repo.UpdateListRecipient(lr)
-	})
+		return j.repo.UpdateListRecipient(tx, lr)
+	});
 }
 
 func newJournal(repo Repository) *repositoryJournal {

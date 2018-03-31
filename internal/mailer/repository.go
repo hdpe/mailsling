@@ -22,14 +22,14 @@ type listRecipientComposite struct {
 }
 
 type Repository interface {
-	GetRecipientDataByStatus([]RecipientStatus) ([]listRecipientComposite, error)
-	GetRecipientByEmail(string) (recipient Recipient, found bool, err error)
-	InsertRecipient(Recipient) (int, error)
-	GetListRecipient(int) (ListRecipient, error)
-	GetListRecipientByEmailAndListID(email string, listID string) (listRecipient ListRecipient, found bool, err error)
-	InsertListRecipient(ListRecipient) (int, error)
-	UpdateListRecipient(ListRecipient) error
-	DoInTx(func() error) error
+	GetRecipientDataByStatus(*sql.Tx, []RecipientStatus) ([]listRecipientComposite, error)
+	GetRecipientByEmail(*sql.Tx, string) (recipient Recipient, found bool, err error)
+	InsertRecipient(*sql.Tx, Recipient) (int, error)
+	GetListRecipient(*sql.Tx, int) (ListRecipient, error)
+	GetListRecipientByEmailAndListID(tx *sql.Tx, email string, listID string) (listRecipient ListRecipient, found bool, err error)
+	InsertListRecipient(*sql.Tx, ListRecipient) (int, error)
+	UpdateListRecipient(*sql.Tx, ListRecipient) error
+	DoInTx(func(*sql.Tx) error) error
 	Close() error
 }
 
@@ -37,8 +37,8 @@ type DBRepository struct {
 	Db *sql.DB
 }
 
-func (r *DBRepository) GetRecipientDataByStatus(statuses []RecipientStatus) (result []listRecipientComposite, err error) {
-	rows, err := r.Db.Query(fmt.Sprintf(`
+func (r *DBRepository) GetRecipientDataByStatus(tx *sql.Tx, statuses []RecipientStatus) (result []listRecipientComposite, err error) {
+	rows, err := tx.Query(fmt.Sprintf(`
 		select lr.id, r.id, r.email, lr.list_id, lr.status 
 		from recipients r 
 			inner join list_recipients lr
@@ -77,8 +77,22 @@ func toStatusInFragment(statuses []RecipientStatus) string {
 	return fmt.Sprintf("status in (%s)", strings.Join(strs, ", "))
 }
 
-func (r *DBRepository) GetListRecipient(id int) (result ListRecipient, err error) {
-	rows, err := r.Db.Query("select id, list_id, recipient_id, status from list_recipients where id = ?", id)
+func (r *DBRepository) GetListRecipient(tx *sql.Tx, id int) (lr ListRecipient, err error) {
+	lr, err = r.getListRecipientInternal(tx, id)
+	if err != nil {
+		return
+	}
+
+	attribs, err := r.getListRecipientAttributes(tx, id)
+	if err == nil {
+		lr.attribs = attribs
+	}
+
+	return
+}
+
+func (r *DBRepository) getListRecipientInternal(tx *sql.Tx, id int) (result ListRecipient, err error) {
+	rows, err := tx.Query("select id, list_id, recipient_id, status from list_recipients where id = ?", id)
 
 	if err != nil {
 		err = fmt.Errorf("couldn't get row: %v", err)
@@ -99,13 +113,14 @@ func (r *DBRepository) GetListRecipient(id int) (result ListRecipient, err error
 	}
 	if err = rows.Err(); err != nil {
 		err = fmt.Errorf("error iterating rows: %v", err)
+		return
 	}
 
 	return result, err
 }
 
-func (r *DBRepository) GetRecipientByEmail(email string) (result Recipient, found bool, err error) {
-	rows, err := r.Db.Query("select id, email from recipients where email = ?", email)
+func (r *DBRepository) GetRecipientByEmail(tx *sql.Tx, email string) (result Recipient, found bool, err error) {
+	rows, err := tx.Query("select id, email from recipients where email = ?", email)
 
 	if err != nil {
 		err = fmt.Errorf("couldn't get row: %v", err)
@@ -129,8 +144,8 @@ func (r *DBRepository) GetRecipientByEmail(email string) (result Recipient, foun
 	return result, found, err
 }
 
-func (r *DBRepository) InsertRecipient(recipient Recipient) (int, error) {
-	res, err := r.Db.Exec("insert into recipients (email) values (?)", recipient.Email)
+func (r *DBRepository) InsertRecipient(tx *sql.Tx, recipient Recipient) (int, error) {
+	res, err := tx.Exec("insert into recipients (email) values (?)", recipient.Email)
 	if err != nil {
 		return 0, fmt.Errorf("couldn't perform insert: %v", err)
 	}
@@ -141,9 +156,24 @@ func (r *DBRepository) InsertRecipient(recipient Recipient) (int, error) {
 	return int(id), nil
 }
 
-func (r *DBRepository) GetListRecipientByEmailAndListID(email string, listID string) (
+func (r *DBRepository) GetListRecipientByEmailAndListID(tx *sql.Tx, email string, listID string) (
+	lr ListRecipient, found bool, err error) {
+	lr, found, err = r.getListRecipientByEmailAndListIDInternal(tx, email, listID)
+	if !found || err != nil {
+		return
+	}
+
+	attribs, err := r.getListRecipientAttributes(tx, lr.id)
+	if err == nil {
+		lr.attribs = attribs
+	}
+
+	return
+}
+
+func (r *DBRepository) getListRecipientByEmailAndListIDInternal(tx *sql.Tx, email string, listID string) (
 	result ListRecipient, found bool, err error) {
-	rows, err := r.Db.Query(`
+	rows, err := tx.Query(`
 		select lr.id, lr.list_id, lr.recipient_id, lr.status
 		from list_recipients lr
 			inner join recipients r 
@@ -167,13 +197,14 @@ func (r *DBRepository) GetListRecipientByEmailAndListID(email string, listID str
 	}
 	if err = rows.Err(); err != nil {
 		err = fmt.Errorf("error iterating rows: %v", err)
+		return
 	}
 
 	return result, found, err
 }
 
-func (r *DBRepository) InsertListRecipient(listRecipient ListRecipient) (int, error) {
-	res, err := r.Db.Exec("insert into list_recipients (list_id, recipient_id, status) values (?, ?, ?)",
+func (r *DBRepository) InsertListRecipient(tx *sql.Tx, listRecipient ListRecipient) (int, error) {
+	res, err := tx.Exec("insert into list_recipients (list_id, recipient_id, status) values (?, ?, ?)",
 		listRecipient.listID, listRecipient.recipientID, RecipientStatuses.Get("new"))
 	if err != nil {
 		return 0, fmt.Errorf("couldn't perform insert: %v", err)
@@ -182,27 +213,27 @@ func (r *DBRepository) InsertListRecipient(listRecipient ListRecipient) (int, er
 	if err != nil {
 		return 0, fmt.Errorf("couldn't get inserted row ID: %v", err)
 	}
-	err = r.updateListRecipientAttributes(int(id), listRecipient.attribs)
+	err = r.updateListRecipientAttributes(tx, int(id), listRecipient.attribs)
 	return int(id), err
 }
 
-func (r *DBRepository) UpdateListRecipient(listRecipient ListRecipient) error {
-	_, err := r.Db.Exec("update list_recipients set status = ? where id = ?",
+func (r *DBRepository) UpdateListRecipient(tx *sql.Tx, listRecipient ListRecipient) error {
+	_, err := tx.Exec("update list_recipients set status = ? where id = ?",
 		listRecipient.status, listRecipient.id)
 	if err != nil {
 		return fmt.Errorf("couldn't perform update: %v", err)
 	}
-	err = r.updateListRecipientAttributes(listRecipient.id, listRecipient.attribs)
+	err = r.updateListRecipientAttributes(tx, listRecipient.id, listRecipient.attribs)
 	return err
 }
 
-func (r *DBRepository) updateListRecipientAttributes(listRecipientID int, attribs map[string]string) error {
-	_, err := r.Db.Exec("delete from list_recipient_attributes where list_recipient_id = ?", listRecipientID)
+func (r *DBRepository) updateListRecipientAttributes(tx *sql.Tx, listRecipientID int, attribs map[string]string) error {
+	_, err := tx.Exec("delete from list_recipient_attributes where list_recipient_id = ?", listRecipientID)
 	if err != nil {
 		return fmt.Errorf("couldn't delete existing attributes: %v", err)
 	}
 	for k, v := range attribs {
-		_, err := r.Db.Exec("insert into list_recipient_attributes (list_recipient_id, `key`, `value`) values (?, ?, ?)",
+		_, err := tx.Exec("insert into list_recipient_attributes (list_recipient_id, `key`, `value`) values (?, ?, ?)",
 			listRecipientID, k, v)
 		if err != nil {
 			return fmt.Errorf("couldn't insert attribute: %v", err)
@@ -211,22 +242,59 @@ func (r *DBRepository) updateListRecipientAttributes(listRecipientID int, attrib
 	return nil
 }
 
-func (r *DBRepository) DoInTx(action func() error) error {
+func (r *DBRepository) getListRecipientAttributes(tx *sql.Tx, listRecipientID int) (result map[string]string, err error) {
+	result = make(map[string]string)
+	rows, err := tx.Query("select `key`, `value` from list_recipient_attributes where list_recipient_id = ?", listRecipientID)
+	if err != nil {
+		err = fmt.Errorf("couldn't get row: %v", err)
+		return
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			key   string
+			value string
+		)
+		err = rows.Scan(&key, &value)
+		if err != nil {
+			err = fmt.Errorf("error retrieving row: %v", err)
+			return
+		}
+		result[key] = value
+	}
+	if err = rows.Err(); err != nil {
+		err = fmt.Errorf("error iterating rows: %v", err)
+	}
+
+	return result, err
+}
+
+func (r *DBRepository) DoInTx(action func(tx *sql.Tx) error) error {
 	tx, err := r.Db.Begin()
 
-	defer tx.Rollback()
-
 	if err != nil {
 		return err
 	}
 
-	err = action()
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p)
+		} else if err != nil {
+			rollbackErr := tx.Rollback()
+			if rollbackErr != nil {
+				err = fmt.Errorf("error rolling back tx: %v after %v", rollbackErr, err)
+			}
+		} else {
+			err = tx.Commit()
+		}
+	}()
 
-	if err != nil {
-		return err
-	}
+	err = action(tx)
 
-	return tx.Commit()
+	return err
 }
 
 func (r *DBRepository) Close() error {
@@ -306,6 +374,10 @@ func NewRepository(dsn string) (*DBRepository, error) {
 	}
 
 	err = applyMigrations(db)
+
+	if err != nil {
+		return nil, fmt.Errorf("couldn't apply migrations: %v", err)
+	}
 
 	return &DBRepository{Db: db}, err
 }
