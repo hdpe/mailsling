@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 )
 
 type setRecipientStateMessage struct {
@@ -110,7 +111,7 @@ func (m *Mailer) getListIDs(msg setRecipientStateMessage) []string {
 
 func NewMailer(log *Loggers, ms MessageSource, listID string, repo Repository, client Client) *Mailer {
 	return &Mailer{log, ms, listID,
-		&repositoryJournal{log: log, repo: repo}, &clientNotifier{client: client}}
+		&repositoryJournal{log: log, repo: repo, clock: &stdClock{}}, &clientNotifier{client: client}}
 }
 
 func parseMessage(str string) (msg setRecipientStateMessage, err error) {
@@ -129,4 +130,11 @@ func parseMessage(str string) (msg setRecipientStateMessage, err error) {
 	}
 
 	return parsed, nil
+}
+
+type stdClock struct {
+}
+
+func (c *stdClock) now() time.Time {
+	return time.Now()
 }

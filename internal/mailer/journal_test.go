@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
@@ -15,6 +16,8 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 		listIDs []string
 		status  RecipientStatus
 		attribs map[string]string
+
+		time time.Time
 
 		getRecipientByEmailResult map[string]recipientResult
 
@@ -40,6 +43,8 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 			status:  RecipientStatuses.Get("new"),
 			attribs: map[string]string{"k": "v"},
 
+			time: time.Date(2018, 03, 28, 1, 2, 3, 4, time.Local),
+
 			getRecipientByEmailResult: map[string]recipientResult{},
 
 			expectedInsertRecipient: Recipient{Email: "x"},
@@ -51,8 +56,8 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 			getListRecipientByEmailAndListIDInvoked: false,
 
 			expectedInsertListRecipients: []ListRecipient{
-				{recipientID: 1, listID: "a", status: RecipientStatuses.Get("new"), attribs: map[string]string{"k": "v"}},
-				{recipientID: 1, listID: "b", status: RecipientStatuses.Get("new"), attribs: map[string]string{"k": "v"}},
+				{recipientID: 1, listID: "a", status: RecipientStatuses.Get("new"), attribs: map[string]string{"k": "v"}, lastModified: time.Date(2018, 03, 28, 1, 2, 3, 4, time.Local)},
+				{recipientID: 1, listID: "b", status: RecipientStatuses.Get("new"), attribs: map[string]string{"k": "v"}, lastModified: time.Date(2018, 03, 28, 1, 2, 3, 4, time.Local)},
 			},
 
 			expectedAsString: "",
@@ -83,6 +88,8 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 			listIDs: []string{"a"},
 			status:  RecipientStatuses.Get("unsubscribing"),
 
+			time: time.Date(2018, 03, 28, 1, 2, 3, 4, time.Local),
+
 			getRecipientByEmailResult: map[string]recipientResult{
 				"x": {found: true},
 			},
@@ -96,7 +103,7 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 
 			expectedInsertListRecipients: nil,
 
-			expectedUpdateListRecipients: []ListRecipient{{id: 1, status: RecipientStatuses.Get("unsubscribing")}},
+			expectedUpdateListRecipients: []ListRecipient{{id: 1, status: RecipientStatuses.Get("unsubscribing"), lastModified: time.Date(2018, 03, 28, 1, 2, 3, 4, time.Local)}},
 
 			expectedAsString: "",
 		},
@@ -210,7 +217,7 @@ func TestRepositoryJournal_SetRecipientPendingState(t *testing.T) {
 			onUpdateListRecipient:              tc.onUpdateListRecipient,
 		})
 
-		j := &repositoryJournal{log: NOOPLog, repo: r}
+		j := &repositoryJournal{log: NOOPLog, repo: r, clock: &testClock{time: tc.time}}
 
 		res := j.SetRecipientPendingState(tc.email, tc.listIDs, tc.status, tc.attribs)
 
@@ -485,4 +492,12 @@ func (r *simpleTestRepository) UpdateListRecipient(tx *sql.Tx, lr ListRecipient)
 
 func (r *simpleTestRepository) DoInTx(action func(*sql.Tx) error) error {
 	return action(nil)
+}
+
+type testClock struct {
+	time time.Time
+}
+
+func (c *testClock) now() time.Time {
+	return c.time
 }

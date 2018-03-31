@@ -1,6 +1,9 @@
 package mailer
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type Recipient struct {
 	ID    int
@@ -28,9 +31,10 @@ var RecipientStatuses = recipientStatusSet{
 }
 
 type ListRecipient struct {
-	id          int
-	listID      string
-	recipientID int
-	status      RecipientStatus
-	attribs     map[string]string
+	id           int
+	listID       string
+	recipientID  int
+	status       RecipientStatus
+	attribs      map[string]string
+	lastModified time.Time
 }

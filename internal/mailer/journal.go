@@ -3,11 +3,13 @@ package mailer
 import (
 	"database/sql"
 	"fmt"
+	"time"
 )
 
 type repositoryJournal struct {
-	log  *Loggers
-	repo Repository
+	log   *Loggers
+	repo  Repository
+	clock clock
 }
 
 func (j *repositoryJournal) SetRecipientPendingState(email string, lists []string, status RecipientStatus, attribs map[string]string) error {
@@ -39,6 +41,7 @@ func (j *repositoryJournal) SetRecipientPendingState(email string, lists []strin
 				return fmt.Errorf("couldn't check for existing list recipient: %v", err)
 			} else if lrFound {
 				lr.status = status
+				lr.lastModified = j.clock.now()
 				lr.attribs = attribs
 
 				err = j.repo.UpdateListRecipient(tx, lr)
@@ -48,10 +51,11 @@ func (j *repositoryJournal) SetRecipientPendingState(email string, lists []strin
 				}
 			} else {
 				_, err = j.repo.InsertListRecipient(tx, ListRecipient{
-					recipientID: recipientID,
-					listID:      listID,
-					status:      status,
-					attribs:     attribs,
+					recipientID:  recipientID,
+					listID:       listID,
+					status:       status,
+					lastModified: j.clock.now(),
+					attribs:      attribs,
 				})
 
 				if err != nil {
@@ -74,9 +78,9 @@ func (j *repositoryJournal) GetRecipientPendingState() ([]listRecipientComposite
 			RecipientStatuses.Get("unsubscribing")})
 
 		return innerErr
-	});
+	})
 
-	return result, err;
+	return result, err
 }
 
 func (j *repositoryJournal) UpdateListRecipient(listRecipientID int, status RecipientStatus) error {
@@ -90,9 +94,9 @@ func (j *repositoryJournal) UpdateListRecipient(listRecipientID int, status Reci
 		lr.status = status
 
 		return j.repo.UpdateListRecipient(tx, lr)
-	});
+	})
 }
 
-func newJournal(repo Repository) *repositoryJournal {
-	return &repositoryJournal{repo: repo}
+type clock interface {
+	now() time.Time
 }

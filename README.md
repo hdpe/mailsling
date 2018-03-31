@@ -51,9 +51,9 @@ AWS_REGION=eu-west-2
 
 MAILER_SQS_URL=https://sqs.eu-west-2.amazonaws.com/01234567890123/blah-queue
 
-# MySQL go-sql-driver DSN - multiStatements parameter is required
+# MySQL go-sql-driver DSN - multiStatements/parseTime parameters are required
 
-MAILER_DB_DSN=mailer:password@/mailer?multiStatements=true
+MAILER_DB_DSN=mailer:password@/mailer?multiStatements=true&parseTime=true
 
 # MailChimp API key
 

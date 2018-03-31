@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/hdpe/mailsling/internal/mailer/schema"
@@ -92,7 +93,7 @@ func (r *DBRepository) GetListRecipient(tx *sql.Tx, id int) (lr ListRecipient, e
 }
 
 func (r *DBRepository) getListRecipientInternal(tx *sql.Tx, id int) (result ListRecipient, err error) {
-	rows, err := tx.Query("select id, list_id, recipient_id, status from list_recipients where id = ?", id)
+	rows, err := tx.Query("select id, list_id, recipient_id, status, last_modified from list_recipients where id = ?", id)
 
 	if err != nil {
 		err = fmt.Errorf("couldn't get row: %v", err)
@@ -174,7 +175,7 @@ func (r *DBRepository) GetListRecipientByEmailAndListID(tx *sql.Tx, email string
 func (r *DBRepository) getListRecipientByEmailAndListIDInternal(tx *sql.Tx, email string, listID string) (
 	result ListRecipient, found bool, err error) {
 	rows, err := tx.Query(`
-		select lr.id, lr.list_id, lr.recipient_id, lr.status
+		select lr.id, lr.list_id, lr.recipient_id, lr.status, lr.last_modified
 		from list_recipients lr
 			inner join recipients r 
 				on lr.recipient_id = r.id
@@ -218,8 +219,8 @@ func (r *DBRepository) InsertListRecipient(tx *sql.Tx, listRecipient ListRecipie
 }
 
 func (r *DBRepository) UpdateListRecipient(tx *sql.Tx, listRecipient ListRecipient) error {
-	_, err := tx.Exec("update list_recipients set status = ? where id = ?",
-		listRecipient.status, listRecipient.id)
+	_, err := tx.Exec("update list_recipients set status = ?, last_modified = ? where id = ?",
+		listRecipient.status, listRecipient.lastModified, listRecipient.id)
 	if err != nil {
 		return fmt.Errorf("couldn't perform update: %v", err)
 	}
@@ -320,19 +321,19 @@ func mapRecipientRow(rows *sql.Rows) (Recipient, error) {
 
 func mapListRecipientRow(rows *sql.Rows) (ListRecipient, error) {
 	var (
-		id          int
-		listID      string
-		recipientID int
-		status      string
-		//welcomeTime time.Time
+		id           int
+		listID       string
+		recipientID  int
+		status       string
+		lastModified time.Time
 
 		r ListRecipient
 	)
 
-	err := rows.Scan(&id, &listID, &recipientID, &status /*&welcomeTime*/)
+	err := rows.Scan(&id, &listID, &recipientID, &status, &lastModified)
 
 	if err == nil {
-		r = ListRecipient{id: id, listID: listID, recipientID: recipientID, status: RecipientStatuses.Get(status) /*WelcomeTime: welcomeTime*/}
+		r = ListRecipient{id: id, listID: listID, recipientID: recipientID, status: RecipientStatuses.Get(status), lastModified: lastModified}
 	}
 
 	return r, err
@@ -345,12 +346,11 @@ func mapListRecipientCompositeRow(rows *sql.Rows) (listRecipientComposite, error
 		email           string
 		listID          string
 		status          string
-		//welcomeTime time.Time
 
 		r listRecipientComposite
 	)
 
-	err := rows.Scan(&listRecipientID, &recipientID, &email, &listID, &status /*&welcomeTime*/)
+	err := rows.Scan(&listRecipientID, &recipientID, &email, &listID, &status)
 
 	if err == nil {
 		r = listRecipientComposite{
@@ -359,7 +359,6 @@ func mapListRecipientCompositeRow(rows *sql.Rows) (listRecipientComposite, error
 			email:           email,
 			listID:          listID,
 			status:          RecipientStatuses.Get(status),
-			/*WelcomeTime: welcomeTime*/
 		}
 	}
 
