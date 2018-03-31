@@ -1,7 +1,8 @@
 #!/bin/sh
 docker run \
     --rm \
-    -e MYSQL_RANDOM_ROOT_PASSWORD=yes \
+    --name mailsling_mysql \
+    -e MYSQL_ROOT_PASSWORD=password \
     -e MYSQL_DATABASE=mailer \
     -e MYSQL_USER=mailer \
     -e MYSQL_PASSWORD=password \
