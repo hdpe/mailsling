@@ -1,0 +1,19 @@
+version: '3.1'
+services:
+  mysql:
+    image: mysql:5.6.32
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: mailer
+      MYSQL_USER: mailer
+      MYSQL_PASSWORD: password
+
+  mailsling:
+    image: hdpe/mailsling
+    environment:
+      AWS_ACCESS_KEY_ID:
+      AWS_SECRET_ACCESS_KEY:
+      AWS_REGION:
+      MAILER_DB_DSN: 'mailer:password@(mysql)/mailer?multiStatements=true&parseTime=true' 
+      MAILER_SQS_URL:
+      MAILER_MAILCHIMP_API_KEY:
