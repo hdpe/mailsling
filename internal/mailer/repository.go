@@ -205,8 +205,8 @@ func (r *DBRepository) getListRecipientByEmailAndListIDInternal(tx *sql.Tx, emai
 }
 
 func (r *DBRepository) InsertListRecipient(tx *sql.Tx, listRecipient ListRecipient) (int, error) {
-	res, err := tx.Exec("insert into list_recipients (list_id, recipient_id, status) values (?, ?, ?)",
-		listRecipient.listID, listRecipient.recipientID, RecipientStatuses.Get("new"))
+	res, err := tx.Exec("insert into list_recipients (list_id, recipient_id, status, last_modified) values (?, ?, ?, ?)",
+		listRecipient.listID, listRecipient.recipientID, RecipientStatuses.Get("new"), listRecipient.lastModified)
 	if err != nil {
 		return 0, fmt.Errorf("couldn't perform insert: %v", err)
 	}
